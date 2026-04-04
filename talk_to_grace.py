@@ -79,7 +79,7 @@ class GraceChat(Node):
             d = json.loads(msg.data)
             broadcast = d.get("broadcast", "")
             salience  = d.get("salience", 0)
-            if salience > 0.3 and broadcast:
+            if salience > 0.6 and broadcast:
                 print(f"{DIM}  🧠 [{salience:.2f}] {broadcast[:80]}{RESET}")
         except Exception:
             pass
