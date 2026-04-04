@@ -135,9 +135,10 @@ def main():
     t.start()
 
     print(f"""
-{CYAN}{BOLD}╔══════════════════════════════════════════╗
+{CYAN}{BOLD}
+╔══════════════════════════════════════════╗
 ║        Talking to GRACE                  ║
-║  Wildlife photography robot · Vancouver  ║
+║  Robot with Consciousness and Emotions   ║
 ╚══════════════════════════════════════════╝{RESET}
 
 {DIM}Responses flow through GRACE's full cognitive pipeline.
