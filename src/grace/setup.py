@@ -63,6 +63,7 @@ setup(
             'default_mode       = grace.conscious.default_mode:main',
             'narrative_self     = grace.conscious.narrative_self:main',
             'action_execution   = grace.conscious.action_execution:main',
+            'conversation       = grace.conscious.conversation:main',
 
             # ── Dreaming / plasticity ────────────────────────────────
             'dreaming_process   = grace.dreaming.dreaming_process:main',
