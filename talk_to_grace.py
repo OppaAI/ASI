@@ -1,41 +1,60 @@
 #!/usr/bin/env python3
 """
 talk_to_grace.py
-Interactive terminal chat with GRACE.
-Publishes your input to /grace/audio/in and listens for responses
-on /grace/speech/out and /grace/conscious/reflection.
-
-Usage:
-    python3 talk_to_grace.py
+Split-screen terminal UI:
+  ┌─────────────────────────────────┐
+  │  GRACE status panel (fixed)     │
+  │  💭 inner thought               │
+  │  🧠 global workspace            │
+  │  ⚖️  conscience                  │
+  ├─────────────────────────────────┤
+  │  chat scrolls here              │
+  │  ...                            │
+  │  You: hi                        │
+  │  GRACE: hey                     │
+  └─────────────────────────────────┘
 """
 import json
 import threading
 import time
-import sys
+import os
+import shutil
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
 
+# ── ANSI codes ────────────────────────────────────────────────────────────────
 CYAN    = "\033[96m"
 GREEN   = "\033[92m"
 YELLOW  = "\033[93m"
 MAGENTA = "\033[95m"
+RED     = "\033[91m"
 RESET   = "\033[0m"
 BOLD    = "\033[1m"
 DIM     = "\033[2m"
+
+def move(row, col=1):    return f"\033[{row};{col}H"
+def clear_line():        return "\033[2K"
+def save_cursor():       return "\033[s"
+def restore_cursor():    return "\033[u"
+def hide_cursor():       return "\033[?25l"
+def show_cursor():       return "\033[?25h"
+def clear_screen():      return "\033[2J"
+def set_scroll(top, bot): return f"\033[{top};{bot}r"
+
+# ── Status panel is 6 lines tall + 1 separator ────────────────────────────────
+PANEL_LINES = 6
 
 
 class GraceChat(Node):
     def __init__(self):
         super().__init__("grace_chat")
 
-        # ── Publish user speech ───────────────────────────────────────────────
         self._pub_audio  = self.create_publisher(String, "/grace/audio/in",  10)
         self._pub_bundle = self.create_publisher(String, "/grace/sensors/bundle", 10)
 
-        # ── Listen for GRACE responses ────────────────────────────────────────
         self.create_subscription(String, "/grace/speech/out",
                                  self._on_speech, 10)
         self.create_subscription(String, "/grace/conscious/reflection",
@@ -47,47 +66,94 @@ class GraceChat(Node):
         self.create_subscription(String, "/grace/conscience/verdict",
                                  self._on_verdict, 10)
 
-        self._last_speech     = ""
-        self._last_monologue  = ""
-        self._emotion         = "serene"
-        self._waiting         = False
+        self._last_speech    = ""
+        self._last_monologue = ""
+        self._last_gw        = ""
+        self._emotion        = "serene"
+        self._conscience     = ""
+        self._waiting        = False
+        self._lock           = threading.Lock()
 
-    # ── Incoming callbacks ────────────────────────────────────────────────────
+    # ── Panel update — writes into the fixed top area ─────────────────────────
+
+    def _update_panel(self):
+        w = shutil.get_terminal_size((80, 24)).columns
+        with self._lock:
+            out = save_cursor()
+
+            # Row 1 — header
+            out += move(1)
+            out += clear_line()
+            out += f"{CYAN}{BOLD}  GRACE  {RESET}{DIM}{'─' * (w - 8)}{RESET}"
+
+            # Row 2 — emotion
+            out += move(2)
+            out += clear_line()
+            out += f"{MAGENTA}  ❤  {self._emotion:<20}{RESET}"
+
+            # Row 3 — inner thought
+            mono = self._last_monologue[:w - 6] if self._last_monologue else "..."
+            out += move(3)
+            out += clear_line()
+            out += f"{DIM}  💭  {mono}{RESET}"
+
+            # Row 4 — global workspace
+            gw = self._last_gw[:w - 6] if self._last_gw else "..."
+            out += move(4)
+            out += clear_line()
+            out += f"{DIM}  🧠  {gw}{RESET}"
+
+            # Row 5 — conscience
+            cs = self._conscience[:w - 6] if self._conscience else "clear"
+            out += move(5)
+            out += clear_line()
+            out += f"{YELLOW}  ⚖   {cs}{RESET}"
+
+            # Row 6 — separator
+            out += move(6)
+            out += clear_line()
+            out += f"{DIM}{'─' * w}{RESET}"
+
+            out += restore_cursor()
+            print(out, end="", flush=True)
+
+    # ── Callbacks ─────────────────────────────────────────────────────────────
 
     def _on_speech(self, msg: String):
-        """GRACE speaks — this is the primary response."""
         text = msg.data.strip()
         if text and text != self._last_speech:
             self._last_speech = text
-            print(f"\n{GREEN}{BOLD}GRACE:{RESET} {GREEN}{text}{RESET}\n")
+            self._chat_print(f"{GREEN}{BOLD}GRACE:{RESET} {GREEN}{text}{RESET}\n")
             self._waiting = False
 
     def _on_reflection(self, msg: String):
-        """Show GRACE's inner monologue as a subtle hint."""
         try:
             d = json.loads(msg.data)
             mono = d.get("inner_monologue", "").strip()
             if mono and mono != self._last_monologue:
                 self._last_monologue = mono
-                print(f"{DIM}  💭 {mono}{RESET}")
+                self._update_panel()
         except Exception:
             pass
 
     def _on_gw(self, msg: String):
-        """Show what's in the global workspace."""
         try:
             d = json.loads(msg.data)
             broadcast = d.get("broadcast", "")
             salience  = d.get("salience", 0)
-            if salience > 0.6 and broadcast:
-                print(f"{DIM}  🧠 [{salience:.2f}] {broadcast[:80]}{RESET}")
+            if salience > 0.3 and broadcast and broadcast != self._last_gw:
+                self._last_gw = f"[{salience:.2f}] {broadcast}"
+                self._update_panel()
         except Exception:
             pass
 
     def _on_affect(self, msg: String):
         try:
             d = json.loads(msg.data)
-            self._emotion = d.get("emotion_label", "neutral")
+            emotion = d.get("emotion_label", "neutral")
+            if emotion != self._emotion:
+                self._emotion = emotion
+                self._update_panel()
         except Exception:
             pass
 
@@ -95,19 +161,26 @@ class GraceChat(Node):
         try:
             d = json.loads(msg.data)
             if d.get("block_action"):
-                print(f"{YELLOW}  ⚖️  Conscience: {d.get('reasoning','')[:60]}{RESET}")
+                self._conscience = f"VETO — {d.get('reasoning','')[:50]}"
+            else:
+                self._conscience = f"{d.get('verdict','?')} ({d.get('confidence',0):.2f})"
+            self._update_panel()
         except Exception:
             pass
 
-    # ── Send message ──────────────────────────────────────────────────────────
+    # ── Chat print — writes into the scrolling area ───────────────────────────
+
+    def _chat_print(self, text: str):
+        with self._lock:
+            print(text, flush=True)
+
+    # ── Send ──────────────────────────────────────────────────────────────────
 
     def send(self, text: str):
-        # Publish to audio topic
         audio_msg = String()
         audio_msg.data = text
         self._pub_audio.publish(audio_msg)
 
-        # Also publish as a full sensor bundle so the whole pipeline activates
         bundle = {
             "camera_description": "",
             "audio_text":         text,
@@ -130,52 +203,67 @@ def main():
     rclpy.init()
     node = GraceChat()
 
-    # Spin ROS2 in background thread
     t = threading.Thread(target=spin_thread, args=(node,), daemon=True)
     t.start()
 
-    print(f"""
-{CYAN}{BOLD}╔══════════════════════════════════════════╗
-║        Talking to GRACE                  ║
-║         AI with Memory & Emotions        ║
-╚══════════════════════════════════════════╝{RESET}
+    rows = shutil.get_terminal_size((80, 24)).lines
 
-{DIM}Responses flow through GRACE's full cognitive pipeline.
-You'll see 💭 inner thoughts and 🧠 conscious content as she processes.
-Type {RESET}{BOLD}quit{RESET}{DIM} to exit.{RESET}
-""")
+    # Clear screen and set up scroll region below the panel
+    print(hide_cursor(), end="")
+    print(clear_screen(), end="")
+    print(set_scroll(PANEL_LINES + 1, rows), end="", flush=True)
 
-    # Give nodes a moment to connect
+    # Draw initial panel
+    node._update_panel()
+
+    # Move cursor into chat area
+    print(move(PANEL_LINES + 1), end="", flush=True)
+    print(f"{DIM}  Connecting to GRACE...{RESET}", flush=True)
+
     time.sleep(1.0)
+    node._update_panel()
 
     try:
         while True:
+            # Input prompt lives in chat area
+            print(move(rows), end="", flush=True)
             try:
-                emotion_display = f"{MAGENTA}[{node._emotion}]{RESET}"
-                user_input = input(f"{CYAN}{BOLD}You {emotion_display}: {RESET}").strip()
+                emotion = node._emotion
+                prompt = f"{CYAN}{BOLD}You [{emotion}]:{RESET} "
+                print(prompt, end="", flush=True)
+                print(show_cursor(), end="", flush=True)
+                user_input = input("").strip()
+                print(hide_cursor(), end="", flush=True)
             except EOFError:
                 break
 
             if not user_input:
                 continue
             if user_input.lower() in ("quit", "exit", "bye"):
-                print(f"\n{GREEN}GRACE: Goodbye! Stay curious.{RESET}\n")
                 break
+
+            # Echo input into chat scroll area
+            node._chat_print(
+                f"{CYAN}You [{emotion}]:{RESET} {user_input}")
 
             node.send(user_input)
 
-            # Wait up to 15 seconds for a speech response
-            deadline = time.time() + 15.0
+            deadline = time.time() + 20.0
             while node._waiting and time.time() < deadline:
                 time.sleep(0.1)
 
             if node._waiting:
-                print(f"{YELLOW}  (GRACE is still thinking — "
-                      f"response may appear above as inner monologue){RESET}\n")
+                node._chat_print(
+                    f"{YELLOW}  (still thinking...){RESET}")
                 node._waiting = False
 
     except KeyboardInterrupt:
         pass
+
+    # Restore terminal
+    print(show_cursor(), end="")
+    print(set_scroll(1, rows), end="")
+    print(clear_screen(), end="", flush=True)
 
     node.destroy_node()
     rclpy.shutdown()

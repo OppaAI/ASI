@@ -87,15 +87,47 @@ class OllamaClient:
             "model": self.model,
             "messages": messages,
             "stream": False,
+            "think": False,
             "options": {
                 "temperature": self.temperature,
                 "min_p": 0.2,
                 "num_predict": self.max_tokens,
             },
         }
-        resp = requests.post(url, json=payload, headers=self._headers, timeout=self.timeout)
+        resp = requests.post(url, json=payload,
+                            headers=self._headers, timeout=self.timeout)
         resp.raise_for_status()
-        return resp.json()["message"]["content"].strip()
+
+        data = resp.json()
+
+        # Get content, ignore thinking field entirely
+        content = data["message"]["content"].strip()
+
+        # Strip <think>...</think> blocks if they leaked into content
+        import re
+        content = re.sub(r"<think>.*?</think>", "", content,
+                        flags=re.DOTALL).strip()
+
+        # Strip markdown code fences
+        if content.startswith("```"):
+            lines = content.split("\n")
+            lines = [l for l in lines if not l.strip().startswith("```")]
+            content = "\n".join(lines).strip()
+
+        # If model wrapped JSON in explanation text, extract just the JSON
+        # Find first { or [ and last } or ]
+        json_start = -1
+        json_end   = -1
+        for i, ch in enumerate(content):
+            if ch in "{[" and json_start == -1:
+                json_start = i
+            if ch in "}]":
+                json_end = i
+
+        if json_start != -1 and json_end != -1 and json_end > json_start:
+            content = content[json_start:json_end + 1]
+
+        return content
 
     def _nvidia_chat(self, messages: list) -> str:
         url = f"{self.host}/chat/completions"
