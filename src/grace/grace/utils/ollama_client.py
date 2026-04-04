@@ -30,7 +30,7 @@ class OllamaClient:
         api_key: Optional[str] = None,
         timeout: float = 60.0,
         max_tokens: int = 512,
-        temperature: float = 0.7,
+        temperature: float = 1.25,
     ):
         self.host = host.rstrip("/")
         self.model = model
@@ -89,6 +89,7 @@ class OllamaClient:
             "stream": False,
             "options": {
                 "temperature": self.temperature,
+                "min_p": 0.2,
                 "num_predict": self.max_tokens,
             },
         }
