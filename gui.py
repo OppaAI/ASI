@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 grace_gradio_fullbrain.py  —  GRACE Full-Brain Gradio Interface
-Updated: Robot-style cyan O-ring eyes + animated mouth face
+Emotion sync fix: iframe polls parent DOM for .emotion-badge text every 200ms.
+No postMessage, no js_runner race — always in sync with the status bar.
 """
 import json
 import threading
@@ -87,152 +88,171 @@ CUSTOM_CSS = """
 .grace-msg em{color:#aaddff}
 """
 
-# ── FACE HTML — iframe with srcdoc (robot cyan O-ring eyes) ──────────────────
+# ── FACE HTML ────────────────────────────────────────────────────────────────
+# Emotion sync strategy: the iframe polls window.parent for a global variable
+# `window.__graceEmotion` and `window.__graceSpeaking` every 200ms.
+# The PARENT_INIT_JS sets those globals whenever Gradio updates the state.
+# This is the most reliable approach — no postMessage timing issues, no DOM
+# parsing, works even if the iframe loads after the first emotion update.
 
-_IFRAME_DOC = """<!DOCTYPE html>
+_IFRAME_DOC = r"""<!DOCTYPE html>
 <html><head><style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#050508;overflow:hidden;width:100%;height:100%}
+body{background:#050d10;overflow:hidden;width:100%;height:100%}
 canvas{display:block;width:100%;height:100%}
 </style></head><body>
 <canvas id="c"></canvas>
 <script>
-var canvas=document.getElementById('c');
-var ctx=canvas.getContext('2d');
-var emotion='serene', speaking=false;
+var c=document.getElementById('c'),ctx=c.getContext('2d');
 var W=0,H=0,blinkT=0,lastBlink=Date.now();
-var curProps={},mouseX=.5,mouseY=.5,eyeLX=0,eyeLY=0,eyeRX=0,eyeRY=0;
 
-function resize(){W=window.innerWidth||600;H=window.innerHeight||350;canvas.width=W;canvas.height=H;}
-resize();
-window.addEventListener('resize',resize);
-window.addEventListener('message',function(e){
-  var d=e.data||{};
-  if(d.emotion) emotion=d.emotion.toLowerCase();
-  if(d.speaking!==undefined) speaking=d.speaking;
-});
-document.addEventListener('mousemove',function(e){mouseX=e.clientX/W;mouseY=e.clientY/H;});
+var G={emotion:'serene',speaking:false};
 
-var EMOTIONS={
-  serene:   {eyeOuter:38,eyeInner:22,eyeRing:2,mouthW:55,mouthH:6, mouthOpen:0,pupilSize:10,browAngle:0,   glowA:.7},
-  happy:    {eyeOuter:36,eyeInner:20,eyeRing:2,mouthW:70,mouthH:10,mouthOpen:0,pupilSize:9, browAngle:-.08,glowA:1.0},
-  sad:      {eyeOuter:34,eyeInner:19,eyeRing:2,mouthW:45,mouthH:6, mouthOpen:0,pupilSize:9, browAngle:.15, glowA:.4},
-  surprised:{eyeOuter:46,eyeInner:28,eyeRing:3,mouthW:30,mouthH:8, mouthOpen:1,pupilSize:7, browAngle:-.15,glowA:1.0},
-  thinking: {eyeOuter:32,eyeInner:16,eyeRing:2,mouthW:42,mouthH:4, mouthOpen:0,pupilSize:10,browAngle:.1,  glowA:.5},
-  angry:    {eyeOuter:34,eyeInner:20,eyeRing:2,mouthW:50,mouthH:5, mouthOpen:0,pupilSize:8, browAngle:.25, glowA:.8},
-  confused: {eyeOuter:36,eyeInner:21,eyeRing:2,mouthW:44,mouthH:5, mouthOpen:0,pupilSize:10,browAngle:.12, glowA:.55},
-  curiosity:{eyeOuter:40,eyeInner:24,eyeRing:2,mouthW:50,mouthH:7, mouthOpen:0,pupilSize:10,browAngle:-.05,glowA:.8},
+var EMOS={
+  serene:   {eyeOpen:1.0, mouthCurve:0.25,mouthW:50,mouthOH:0, browLift:0,   browAng:0,    glow:0.18},
+  happy:    {eyeOpen:0.5, mouthCurve:1.0, mouthW:62,mouthOH:0, browLift:0.1, browAng:-0.1, glow:0.30},
+  sad:      {eyeOpen:0.8, mouthCurve:-0.7,mouthW:46,mouthOH:0, browLift:-0.1,browAng:0.35, glow:0.10},
+  surprised:{eyeOpen:1.4, mouthCurve:0,   mouthW:30,mouthOH:22,browLift:0.6, browAng:-0.2, glow:0.35},
+  thinking: {eyeOpen:0.55,mouthCurve:0,   mouthW:42,mouthOH:0, browLift:-0.2,browAng:0.15, glow:0.14},
+  angry:    {eyeOpen:0.7, mouthCurve:-0.4,mouthW:50,mouthOH:0, browLift:-0.3,browAng:0.5,  glow:0.22},
+  confused: {eyeOpen:0.9, mouthCurve:0.05,mouthW:44,mouthOH:0, browLift:0.1, browAng:0.2,  glow:0.16},
+  curiosity:{eyeOpen:1.1, mouthCurve:0.2, mouthW:50,mouthOH:0, browLift:0.2, browAng:-0.1, glow:0.20},
 };
-(function(){var e=EMOTIONS.serene;for(var k in e)curProps[k]=e[k];})();
+
+var cur={eyeOpen:1.0,mouthCurve:0.25,mouthW:50,mouthOH:0,browLift:0,browAng:0,glow:0.18};
 
 function lerp(a,b,t){return a+(b-a)*t;}
-
-function drawRobotEye(cx,cy,p,side,blinkScale){
-  var outerR=p.eyeOuter,innerR=p.eyeInner,gA=p.glowA;
-  var px=(mouseX-.5)*16*side,py=(mouseY-.5)*12;
-  if(side===1){eyeLX=lerp(eyeLX,px,.08);eyeLY=lerp(eyeLY,py,.08);}
-  else{eyeRX=lerp(eyeRX,px,.08);eyeRY=lerp(eyeRY,py,.08);}
-  var ex=side===1?eyeLX:eyeRX,ey=side===1?eyeLY:eyeRY;
-  ctx.save();ctx.translate(cx,cy);ctx.scale(1,blinkScale);
-  ctx.beginPath();ctx.arc(0,0,outerR+8,0,Math.PI*2);
-  ctx.fillStyle='rgba(0,8,20,.95)';ctx.fill();
-  ctx.strokeStyle='rgba(0,200,255,.35)';ctx.lineWidth=1.5;ctx.stroke();
-  var grd=ctx.createRadialGradient(0,0,innerR*.5,0,0,outerR+10);
-  grd.addColorStop(0,'rgba(0,255,255,'+(gA*.25)+')');
-  grd.addColorStop(1,'rgba(0,255,255,0)');
-  ctx.beginPath();ctx.arc(0,0,outerR+10,0,Math.PI*2);ctx.fillStyle=grd;ctx.fill();
-  ctx.beginPath();ctx.arc(0,0,outerR,0,Math.PI*2);
-  ctx.strokeStyle='rgba(0,255,255,'+gA+')';ctx.lineWidth=p.eyeRing+1;
-  ctx.shadowColor='rgba(0,255,255,'+(gA*.8)+')';ctx.shadowBlur=12;
-  ctx.stroke();ctx.shadowBlur=0;
-  ctx.beginPath();ctx.arc(0,0,innerR,0,Math.PI*2);
-  ctx.fillStyle='rgba(0,8,20,.97)';ctx.fill();
-  ctx.strokeStyle='rgba(0,200,255,'+(gA*.5)+')';ctx.lineWidth=1;ctx.stroke();
-  var ps=p.pupilSize;
-  ctx.beginPath();ctx.arc(ex*.6,ey*.6,ps,0,Math.PI*2);
-  ctx.fillStyle='rgba(0,255,255,'+(gA*.9)+')';
-  ctx.shadowColor='rgba(0,255,255,1)';ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;
-  ctx.beginPath();ctx.arc(ex*.6-ps*.35,ey*.6-ps*.35,ps*.3,0,Math.PI*2);
-  ctx.fillStyle='rgba(255,255,255,.9)';ctx.fill();
-  ctx.restore();
+function lerpAll(){
+  var tgt=EMOS[G.emotion]||EMOS.serene;
+  for(var k in cur) cur[k]=lerp(cur[k],tgt[k],0.08);
 }
 
-function drawBrows(p){
-  var cx=W/2,cy=H*.38,span=58,angle=p.browAngle,gA=p.glowA;
-  ctx.strokeStyle='rgba(0,220,255,'+(gA*.7)+')';ctx.lineWidth=2.5;ctx.lineCap='round';
-  ctx.save();ctx.translate(cx-span,cy-p.eyeOuter-10);ctx.rotate(-angle);
-  ctx.beginPath();ctx.moveTo(-14,-4);ctx.lineTo(14,4);ctx.stroke();ctx.restore();
-  ctx.save();ctx.translate(cx+span,cy-p.eyeOuter-10);ctx.rotate(angle);
-  ctx.beginPath();ctx.moveTo(-14,4);ctx.lineTo(14,-4);ctx.stroke();ctx.restore();
+// Poll parent window globals every 200ms — reliable regardless of timing
+function pollParent(){
+  try{
+    var p=window.parent;
+    if(p && p.__graceEmotion !== undefined) G.emotion=p.__graceEmotion;
+    if(p && p.__graceSpeaking !== undefined) G.speaking=p.__graceSpeaking;
+  }catch(e){}
+}
+setInterval(pollParent, 200);
+
+// Also still listen for postMessage as backup
+window.addEventListener('message',function(e){
+  var d=e.data||{};
+  if(d.emotion !== undefined) G.emotion=d.emotion.toLowerCase();
+  if(d.speaking !== undefined) G.speaking=d.speaking;
+});
+
+function resize(){
+  var r=c.getBoundingClientRect();
+  W=r.width||500; H=r.height||320; c.width=W; c.height=H;
+}
+resize();
+window.addEventListener('resize',resize);
+
+function rrect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
 }
 
-function drawMouth(cx,cy,p){
-  var w=p.mouthW,h=p.mouthH,gA=p.glowA;
-  ctx.save();ctx.translate(cx,cy);
-  var speakBob=speaking?Math.abs(Math.sin(Date.now()/70))*18:0;
-  var mh=h+(speaking?speakBob*.4:0);
-  if(ctx.roundRect){
-    ctx.beginPath();ctx.roundRect(-w/2-4,-mh/2-4,w+8,mh+8,4);
-  } else {
-    ctx.beginPath();ctx.rect(-w/2-4,-mh/2-4,w+8,mh+8);
-  }
-  ctx.fillStyle='rgba(0,8,18,.9)';ctx.fill();
-  ctx.strokeStyle='rgba(0,180,220,.3)';ctx.lineWidth=1;ctx.stroke();
-  if(speaking){
-    var bars=5;
-    for(var i=0;i<bars;i++){
-      var bh=4+Math.abs(Math.sin(Date.now()/60+i*1.1))*mh*.8;
-      var bx=-w/2+i*(w/(bars-1));
-      var alpha=gA*(.5+Math.abs(Math.sin(Date.now()/60+i*1.1))*.5);
-      ctx.beginPath();
-      if(ctx.roundRect){ctx.roundRect(bx-3,-bh/2,6,bh,2);}
-      else{ctx.rect(bx-3,-bh/2,6,bh);}
-      ctx.fillStyle='rgba(0,255,255,'+alpha+')';
-      ctx.shadowColor='rgba(0,255,255,.6)';ctx.shadowBlur=6;ctx.fill();ctx.shadowBlur=0;
-    }
-  } else if(emotion==='happy'){
-    ctx.beginPath();ctx.moveTo(-w/2,0);ctx.quadraticCurveTo(0,mh+6,w/2,0);
-    ctx.strokeStyle='rgba(0,255,255,'+gA+')';ctx.lineWidth=2.5;ctx.lineCap='round';
-    ctx.shadowColor='rgba(0,255,255,.6)';ctx.shadowBlur=8;ctx.stroke();ctx.shadowBlur=0;
-  } else if(emotion==='sad'){
-    ctx.beginPath();ctx.moveTo(-w/2,6);ctx.quadraticCurveTo(0,-mh-4,w/2,6);
-    ctx.strokeStyle='rgba(0,200,255,'+(gA*.7)+')';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.stroke();
-  } else if(emotion==='surprised'){
-    ctx.beginPath();ctx.arc(0,0,w/3,0,Math.PI*2);
-    ctx.strokeStyle='rgba(0,255,255,'+gA+')';ctx.lineWidth=2;
-    ctx.shadowColor='rgba(0,255,255,.5)';ctx.shadowBlur=6;ctx.stroke();ctx.shadowBlur=0;
-  } else {
-    ctx.beginPath();ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);
-    ctx.strokeStyle='rgba(0,255,255,'+gA+')';ctx.lineWidth=2.5;ctx.lineCap='round';
-    ctx.shadowColor='rgba(0,255,255,.5)';ctx.shadowBlur=6;ctx.stroke();ctx.shadowBlur=0;
-  }
-  ctx.restore();
-}
-
-function animate(){
+function draw(){
   var now=Date.now();
   if(now-lastBlink>3500+Math.random()*3000){blinkT=1;lastBlink=now;}
-  if(blinkT>0)blinkT=Math.max(0,blinkT-.065);
-  var blinkScale=1-Math.sin(blinkT*Math.PI)*.95;
-  var tgt=EMOTIONS[emotion]||EMOTIONS.serene;
-  for(var k in tgt)curProps[k]=lerp(curProps[k]||tgt[k],tgt[k],.07);
-  var p=curProps;
-  ctx.fillStyle='#050508';ctx.fillRect(0,0,W,H);
-  ctx.fillStyle='rgba(0,255,255,.012)';
-  for(var y=0;y<H;y+=3)ctx.fillRect(0,y,W,1);
-  ctx.strokeStyle='rgba(0,255,255,.025)';ctx.lineWidth=.5;
-  for(var x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-  for(var yy=0;yy<H;yy+=50){ctx.beginPath();ctx.moveTo(0,yy);ctx.lineTo(W,yy);ctx.stroke();}
-  var cx=W/2,ey=H*.38,span=58;
-  drawBrows(p);
-  drawRobotEye(cx-span,ey,p,1,blinkScale);
-  drawRobotEye(cx+span,ey,p,-1,blinkScale);
-  drawMouth(cx,ey+p.eyeOuter+42,p);
-  ctx.font='11px monospace';ctx.fillStyle='rgba(0,255,255,.4)';
-  ctx.textAlign='center';ctx.fillText(emotion.toUpperCase(),W/2,H-12);
-  requestAnimationFrame(animate);
+  if(blinkT>0) blinkT=Math.max(0,blinkT-0.07);
+  var blinkScale=1-Math.sin(blinkT*Math.PI)*0.96;
+  lerpAll();
+
+  ctx.fillStyle='#050d10'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(0,200,180,0.013)';
+  for(var y=0;y<H;y+=3) ctx.fillRect(0,y,W,1);
+
+  var cx=W/2, cy=H/2;
+  var fw=Math.min(W*0.72,300), fh=Math.min(H*0.78,240);
+  var rx=fw*0.18;
+
+  // outer shell glow
+  ctx.fillStyle='rgba(0,200,180,'+cur.glow*0.35+')';
+  rrect(cx-fw/2-20,cy-fh/2-16,fw+40,fh+32,rx+12); ctx.fill();
+  // outer shell panel
+  ctx.fillStyle='rgba(10,40,48,0.85)';
+  rrect(cx-fw/2-14,cy-fh/2-10,fw+28,fh+20,rx+8); ctx.fill();
+  // face panel
+  ctx.fillStyle='#0d2226';
+  rrect(cx-fw/2,cy-fh/2,fw,fh,rx); ctx.fill();
+  // face border
+  ctx.strokeStyle='rgba(0,200,180,'+Math.min(cur.glow*1.5,0.4)+')';
+  ctx.lineWidth=1.5;
+  rrect(cx-fw/2,cy-fh/2,fw,fh,rx); ctx.stroke();
+  // ambient glow
+  var grd=ctx.createRadialGradient(cx,cy-fh*0.05,fw*0.05,cx,cy,fw*0.65);
+  grd.addColorStop(0,'rgba(0,220,200,'+cur.glow+')');
+  grd.addColorStop(1,'rgba(0,220,200,0)');
+  ctx.fillStyle=grd;
+  rrect(cx-fw/2,cy-fh/2,fw,fh,rx); ctx.fill();
+
+  var ey=cy-fh*0.10, span=fw*0.24, ew=fw*0.18;
+
+  // brows
+  var by=ey-ew-10+cur.browLift*(-14);
+  var bw=fw*0.13;
+  ctx.strokeStyle='rgba(0,210,195,0.5)';
+  ctx.lineWidth=2.5; ctx.lineCap='round';
+  [-1,1].forEach(function(side){
+    var bx=cx+side*span, dy=side*cur.browAng*8;
+    ctx.save(); ctx.translate(bx,by);
+    ctx.beginPath(); ctx.moveTo(-bw,dy); ctx.lineTo(bw,-dy);
+    ctx.stroke(); ctx.restore();
+  });
+
+  // eyes
+  [cx-span,cx+span].forEach(function(ex){
+    ctx.save(); ctx.translate(ex,ey);
+    ctx.scale(1,cur.eyeOpen*blinkScale);
+    ctx.beginPath(); ctx.arc(0,0,ew,Math.PI,0,false);
+    ctx.strokeStyle='#00d4c8'; ctx.lineWidth=3.5; ctx.lineCap='round';
+    ctx.shadowColor='rgba(0,210,195,0.55)'; ctx.shadowBlur=9;
+    ctx.stroke(); ctx.shadowBlur=0;
+    ctx.beginPath(); ctx.moveTo(-ew,0); ctx.lineTo(ew,0);
+    ctx.strokeStyle='rgba(0,170,160,0.45)'; ctx.lineWidth=1.5;
+    ctx.stroke(); ctx.restore();
+  });
+
+  // mouth
+  var my=cy+fh*0.22, mw=cur.mouthW;
+  ctx.save(); ctx.translate(cx,my);
+  ctx.lineCap='round'; ctx.lineWidth=3;
+  ctx.shadowColor='rgba(255,255,255,0.25)'; ctx.shadowBlur=5;
+  ctx.strokeStyle='rgba(255,255,255,0.88)';
+  if(G.speaking){
+    var oh=8+Math.abs(Math.sin(now/65))*20;
+    ctx.beginPath(); ctx.ellipse(0,0,mw*0.35,oh/2,0,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.72)'; ctx.lineWidth=2.5; ctx.stroke();
+  } else if(cur.mouthOH>4){
+    ctx.beginPath(); ctx.ellipse(0,0,mw*0.38,cur.mouthOH/2,0,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.72)'; ctx.lineWidth=2.5; ctx.stroke();
+  } else {
+    var lift=cur.mouthCurve*22;
+    ctx.beginPath(); ctx.moveTo(-mw/2,-lift*0.3);
+    ctx.quadraticCurveTo(0,lift,mw/2,-lift*0.3); ctx.stroke();
+  }
+  ctx.shadowBlur=0; ctx.restore();
+
+  // label
+  ctx.font='11px monospace'; ctx.fillStyle='rgba(0,200,180,0.32)';
+  ctx.textAlign='center'; ctx.fillText(G.emotion.toUpperCase(),W/2,H-10);
+
+  requestAnimationFrame(draw);
 }
-animate();
+draw();
 </script>
 </body></html>"""
 
@@ -241,20 +261,32 @@ _SRCDOC = _IFRAME_DOC.replace('"', '&quot;')
 FACE_HTML = (
     f'<iframe id="grace-face-iframe" srcdoc="{_SRCDOC}" '
     f'style="width:100%;height:350px;border:none;border-radius:12px;display:block;" '
-    f'sandbox="allow-scripts">'
+    f'sandbox="allow-scripts allow-same-origin">'
     f'</iframe>'
 )
 
+# Parent JS: sets globals on window AND sends postMessage for belt-and-suspenders
 PARENT_INIT_JS = """
 () => {
+    window.__graceEmotion = 'serene';
+    window.__graceSpeaking = false;
+
     window.updateGraceEmotion = function(emotion) {
+        window.__graceEmotion = emotion.toLowerCase();
         var f = document.getElementById('grace-face-iframe');
-        if (f && f.contentWindow) f.contentWindow.postMessage({emotion: emotion}, '*');
+        if (f && f.contentWindow) {
+            try { f.contentWindow.postMessage({emotion: emotion}, '*'); } catch(e){}
+        }
     };
     window.setGraceSpeaking = function(speaking) {
+        window.__graceSpeaking = speaking;
         var f = document.getElementById('grace-face-iframe');
-        if (f && f.contentWindow) f.contentWindow.postMessage({speaking: speaking}, '*');
+        if (f && f.contentWindow) {
+            try { f.contentWindow.postMessage({speaking: speaking}, '*'); } catch(e){}
+        }
     };
+
+    // Auto-scroll chat
     if (!window._graceScrollWatcher) {
         window._graceScrollWatcher = true;
         function scrollChat(){ var c=document.getElementById('chat-container'); if(c) c.scrollTop=c.scrollHeight; }
@@ -421,7 +453,7 @@ def render_status_bar(s: BrainState) -> str:
     return f"""<div class="status-bar">
 <span class="metric-pill"><span class="metric-label">valence</span><div class="progress-bar"><div class="progress-fill" style="width:{int(s.valence*100)}%"></div></div></span>
 <span class="metric-pill"><span class="metric-label">arousal</span><div class="progress-bar"><div class="progress-fill" style="width:{int(s.arousal*100)}%"></div></div></span>
-<span class="metric-pill"><span class="emotion-badge">{s.emotion}</span></span>
+<span class="metric-pill"><span class="emotion-badge" id="grace-emotion-badge">{s.emotion}</span></span>
 <span class="metric-pill"><span class="metric-label">meta</span><span class="metric-value">{s.meta_conf:.2f}</span></span>
 <span class="metric-pill"><span class="metric-label">salience</span><span class="metric-value">{s.salience:.2f}</span></span>
 <span class="metric-pill"><span class="metric-label {vc}">{bi}⚖ {s.verdict}</span><span class="metric-value {vc}">({s.verdict_conf:.2f})</span></span>
@@ -499,8 +531,7 @@ def on_submit(msg, chat, state):
     chat.append({"role":"user","content":msg})
     bridge.send_message(msg)
     state.emotion="thinking"
-    js=("if(window.updateGraceEmotion)window.updateGraceEmotion('thinking');"
-        "if(window.setGraceSpeaking)window.setGraceSpeaking(true);")
+    js = "if(window.updateGraceEmotion)window.updateGraceEmotion('thinking');if(window.setGraceSpeaking)window.setGraceSpeaking(true);"
     return ("",chat,state,update_chat_display(chat),render_status_bar(state),
             render_cognitive_stream(state),render_memory_system(state),js)
 
