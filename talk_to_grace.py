@@ -121,9 +121,13 @@ class GraceChat(Node):
             "dreaming_process","imagination","distillation","consolidation",
         ]}
 
-        self._last_speech = ""
-        self._waiting     = False
-        self._lock        = threading.Lock()
+        self._last_speech   = ""
+        self._waiting       = False
+
+        # FIX: single lock guards ALL shared state — panel redraws AND chat prints
+        self._lock          = threading.Lock()
+        # Pending panel redraw flag — coalesce rapid updates into one draw
+        self._needs_redraw  = False
 
         # Subscriptions
         subs = [
@@ -163,6 +167,21 @@ class GraceChat(Node):
         for topic, cb in subs:
             self.create_subscription(String, topic, cb, 10)
 
+        # Periodic panel refresh — runs on spin thread, rate-limited
+        self.create_timer(0.25, self._maybe_redraw)
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _mark_dirty(self):
+        """Signal that the panel needs a redraw on the next timer tick."""
+        self._needs_redraw = True
+
+    def _maybe_redraw(self):
+        """Called every 250ms on the spin thread. Only draws if something changed."""
+        if self._needs_redraw:
+            self._needs_redraw = False
+            self._redraw()
+
     # ── Unconscious ───────────────────────────────────────────────────────────
 
     def _on_affect(self, msg):
@@ -173,7 +192,7 @@ class GraceChat(Node):
                 self._valence    = d.get("valence",  self._valence)
                 self._arousal    = d.get("arousal",  self._arousal)
                 self._fired["affective_core"] += 1
-            self._redraw()
+            self._mark_dirty()
         except Exception: pass
 
     def _on_reward(self, msg):
@@ -182,14 +201,17 @@ class GraceChat(Node):
             with self._lock:
                 self._reward = d.get("value", 0.0)
                 self._fired["reward_motivation"] += 1
-            self._redraw()
+            self._mark_dirty()
         except Exception: pass
 
     def _on_relevance(self, msg):
         try:
             d = json.loads(msg.data)
             with self._lock:
-                self._salience = max(self._salience, d.get("score", 0.0))
+                # FIX: don't accumulate salience with max() forever —
+                # blend toward new value so it can decay between turns
+                new_score = d.get("score", 0.0)
+                self._salience = self._salience * 0.7 + new_score * 0.3
                 self._fired["relevance_system"] += 1
         except Exception: pass
 
@@ -241,7 +263,7 @@ class GraceChat(Node):
                     self._epi_recalled = c[:70]
                     self._epi_count   += 1
                     self._fired["episodic_memory"] += 1
-                self._redraw()
+                self._mark_dirty()
         except Exception: pass
 
     def _on_semantic(self, msg):
@@ -255,7 +277,7 @@ class GraceChat(Node):
                     self._sem_recalled = c[:70]
                     self._sem_count   += 1
                     self._fired["semantic_memory"] += 1
-                self._redraw()
+                self._mark_dirty()
         except Exception: pass
 
     def _on_procedural(self, msg):
@@ -296,16 +318,18 @@ class GraceChat(Node):
             if bc:
                 with self._lock:
                     self._broadcast = bc
-                    self._salience  = max(self._salience, d.get("salience", 0.0))
+                    sal = d.get("salience", 0.0)
+                    self._salience  = self._salience * 0.7 + sal * 0.3
                     self._fired["global_workspace"] += 1
-                self._redraw()
+                self._mark_dirty()
         except Exception: pass
 
     def _on_salience(self, msg):
         try:
             d = json.loads(msg.data)
             with self._lock:
-                self._salience = max(self._salience, d.get("salience", 0.0))
+                sal = d.get("salience", 0.0)
+                self._salience = self._salience * 0.7 + sal * 0.3
                 self._fired["salience_network"] += 1
         except Exception: pass
 
@@ -319,7 +343,7 @@ class GraceChat(Node):
                     self._monologue  = mono
                     self._conclusion = conc
                     self._fired["reflection"] += 1
-                self._redraw()
+                self._mark_dirty()
         except Exception: pass
 
     def _on_meta(self, msg):
@@ -328,7 +352,7 @@ class GraceChat(Node):
             with self._lock:
                 self._meta_conf = d.get("confidence_in_own_reasoning", self._meta_conf)
                 self._fired["metacognition"] += 1
-            self._redraw()
+            self._mark_dirty()
         except Exception: pass
 
     def _on_plan(self, msg):
@@ -344,7 +368,7 @@ class GraceChat(Node):
                     self._plan_action   = act
                     self._plan_priority = prio
                     self._fired["central_executive"] += 1
-                self._redraw()
+                self._mark_dirty()
         except Exception: pass
 
     def _on_memory(self, msg):
@@ -355,7 +379,7 @@ class GraceChat(Node):
                 with self._lock:
                     self._memory_ctx = bc
                     self._fired["memory_coordinator"] += 1
-                self._redraw()
+                self._mark_dirty()
         except Exception: pass
 
     def _on_wm(self, msg):
@@ -375,7 +399,7 @@ class GraceChat(Node):
                 with self._lock:
                     self._dmn = sim[:70]
                     self._fired["default_mode"] += 1
-                self._redraw()
+                self._mark_dirty()
         except Exception: pass
 
     def _on_narrative(self, msg):
@@ -402,7 +426,7 @@ class GraceChat(Node):
             with self._lock:
                 self._moral_risk = d.get("overall_moral_risk", 0.0)
                 self._fired["moral_reasoning"] += 1
-            self._redraw()
+            self._mark_dirty()
         except Exception: pass
 
     def _on_verdict(self, msg):
@@ -414,7 +438,7 @@ class GraceChat(Node):
                 self._blocked      = d.get("block_action", False)
                 self._verse        = d.get("verse_reference","")
                 self._fired["conscience_core"] += 1
-            self._redraw()
+            self._mark_dirty()
         except Exception: pass
 
     # ── Qualia ────────────────────────────────────────────────────────────────
@@ -429,7 +453,7 @@ class GraceChat(Node):
                     self._unity     = d.get("unity_score", 0.0)
                     self._ineffable = d.get("ineffability_flag", False)
                     self._fired["qualia_binding"] += 1
-                self._redraw()
+                self._mark_dirty()
         except Exception: pass
 
     # ── Dreaming ──────────────────────────────────────────────────────────────
@@ -442,7 +466,7 @@ class GraceChat(Node):
                 with self._lock:
                     self._dream_tone = tone
                     self._fired["dreaming_process"] += 1
-                self._redraw()
+                self._mark_dirty()
         except Exception: pass
 
     def _on_imagination(self, msg):
@@ -451,7 +475,7 @@ class GraceChat(Node):
             with self._lock:
                 self._imagination = d.get("novelty_score", 0.0)
                 self._fired["imagination"] += 1
-            self._redraw()
+            self._mark_dirty()
         except Exception: pass
 
     def _on_distillation(self, msg):
@@ -466,10 +490,10 @@ class GraceChat(Node):
         try:
             with self._lock:
                 self._fired["consolidation"] += 1
-            self._redraw()
+            self._mark_dirty()
         except Exception: pass
 
-    # ── Output — ONLY these go to chat ───────────────────────────────────────
+    # ── Output — ONLY speech goes to the chat area ────────────────────────────
 
     def _on_speech(self, msg):
         text = msg.data.strip()
@@ -477,6 +501,7 @@ class GraceChat(Node):
             self._last_speech = text
             with self._lock:
                 self._fired["conversation"] += 1
+            # _chat acquires the lock internally — don't hold it here
             self._chat(f"\n{GREEN}{BOLD}GRACE:{RESET} {GREEN}{text}{RESET}\n")
             self._waiting = False
 
@@ -489,11 +514,43 @@ class GraceChat(Node):
     # ── Panel ─────────────────────────────────────────────────────────────────
 
     def _redraw(self):
+        """
+        Render the fixed-position brain-state panel (rows 1-10).
+        Must only be called from the spin thread (via _maybe_redraw timer)
+        or while holding self._lock from the main thread.
+        """
         w = shutil.get_terminal_size((110, 30)).columns
 
-        vc = (RED    if self._verdict == "immoral"   else
-              GREEN  if self._verdict == "moral"     else
-              YELLOW if self._verdict == "uncertain" else DIM)
+        with self._lock:
+            emotion       = self._emotion
+            valence       = self._valence
+            arousal       = self._arousal
+            salience      = self._salience
+            meta_conf     = self._meta_conf
+            pred_error    = self._pred_error
+            reward        = self._reward
+            verdict       = self._verdict
+            verdict_conf  = self._verdict_conf
+            blocked       = self._blocked
+            monologue     = self._monologue
+            conclusion    = self._conclusion
+            wm_thought    = self._wm_thought
+            broadcast     = self._broadcast
+            qualia        = self._qualia
+            unity         = self._unity
+            ineffable     = self._ineffable
+            memory_ctx    = self._memory_ctx
+            epi_count     = self._epi_count
+            sem_count     = self._sem_count
+            plan          = self._plan
+            plan_action   = self._plan_action
+            plan_priority = self._plan_priority
+            dmn           = self._dmn
+            dream_tone    = self._dream_tone
+            imagination   = self._imagination
+            dissonance    = self._dissonance
+            insights      = self._insights
+            fired         = dict(self._fired)
 
         layers = [
             ("UNC", ["affective_core","reward_motivation","predictive_processing",
@@ -510,63 +567,67 @@ class GraceChat(Node):
             ("DRM", ["dreaming_process","imagination","distillation","consolidation"]),
         ]
 
-        active_nodes = sum(1 for v in self._fired.values() if v > 0)
-        total_nodes  = len(self._fired)
+        active_nodes = sum(1 for v in fired.values() if v > 0)
+        total_nodes  = len(fired)
+
+        vc = (RED    if verdict == "immoral"   else
+              GREEN  if verdict == "moral"     else
+              YELLOW if verdict == "uncertain" else DIM)
 
         out = sav()
 
         # Row 1 — vital signs
         out += mv(1); out += clr()
         out += f"{CYAN}{BOLD} GRACE {RESET}"
-        out += f" ❤{bar(self._valence,6,MAGENTA)}"
-        out += f" ⚡{bar(self._arousal,6,YELLOW)}"
-        out += f" 🎯{bar(self._salience,6,CYAN)}"
-        out += f" {MAGENTA}{BOLD}{self._emotion:<11}{RESET}"
-        out += f" {DIM}meta:{GREEN}{self._meta_conf:.2f}{RESET}"
-        out += f" {DIM}err:{YELLOW}{self._pred_error:.2f}{RESET}"
-        out += f" {DIM}rew:{GREEN if self._reward>=0 else RED}{self._reward:+.2f}{RESET}"
-        out += f" {vc}⚖{self._verdict}({self._verdict_conf:.2f}){RESET}"
+        out += f" ❤{bar(valence,6,MAGENTA)}"
+        out += f" ⚡{bar(arousal,6,YELLOW)}"
+        out += f" 🎯{bar(salience,6,CYAN)}"
+        out += f" {MAGENTA}{BOLD}{emotion:<11}{RESET}"
+        out += f" {DIM}meta:{GREEN}{meta_conf:.2f}{RESET}"
+        out += f" {DIM}err:{YELLOW}{pred_error:.2f}{RESET}"
+        out += f" {DIM}rew:{GREEN if reward>=0 else RED}{reward:+.2f}{RESET}"
+        out += f" {vc}⚖{verdict}({verdict_conf:.2f}){RESET}"
         out += f" {DIM}🔵{GREEN}{active_nodes}{DIM}/{total_nodes}{RESET}"
 
         # Row 2 — inner monologue
         out += mv(2); out += clr()
-        out += f"{DIM} 💭 {MAGENTA}{trunc(self._monologue, w-6)}{RESET}"
+        out += f"{DIM} 💭 {MAGENTA}{trunc(monologue, w-6)}{RESET}"
 
         # Row 3 — symbolic conclusion / active thought
         out += mv(3); out += clr()
-        conc = self._conclusion or self._wm_thought or "..."
+        conc = conclusion or wm_thought or "..."
         out += f"{DIM} ∴  {WHITE}{trunc(conc, w-6)}{RESET}"
 
         # Row 4 — global workspace
         out += mv(4); out += clr()
-        out += f"{DIM} 🧠 {WHITE}{trunc(self._broadcast, w-6)}{RESET}"
+        out += f"{DIM} 🧠 {WHITE}{trunc(broadcast, w-6)}{RESET}"
 
         # Row 5 — qualia
         out += mv(5); out += clr()
-        unity_s = f" Φ={self._unity:.2f}" if self._unity > 0 else ""
-        ineff_s = " ✦" if self._ineffable else ""
-        out += f"{DIM} 👁  {MAGENTA}{trunc(self._qualia, w-18)}{DIM}{unity_s}{ineff_s}{RESET}"
+        unity_s = f" Φ={unity:.2f}" if unity > 0 else ""
+        ineff_s = " ✦" if ineffable else ""
+        out += f"{DIM} 👁  {MAGENTA}{trunc(qualia, w-18)}{DIM}{unity_s}{ineff_s}{RESET}"
 
         # Row 6 — memory context + recall counts
         out += mv(6); out += clr()
-        mem_right = f"  {DIM}epi×{self._epi_count} sem×{self._sem_count}{RESET}"
-        mem_w = w - 6 - len(f"  epi×{self._epi_count} sem×{self._sem_count}")
-        out += f"{DIM} 🗄  {CYAN}{trunc(self._memory_ctx, mem_w)}{RESET}{mem_right}"
+        mem_right = f"  {DIM}epi×{epi_count} sem×{sem_count}{RESET}"
+        mem_w = w - 6 - len(f"  epi×{epi_count} sem×{sem_count}")
+        out += f"{DIM} 🗄  {CYAN}{trunc(memory_ctx, mem_w)}{RESET}{mem_right}"
 
         # Row 7 — executive plan
         out += mv(7); out += clr()
-        plan_s = f"[{self._plan_action}] {self._plan}" if self._plan_action else self._plan or "..."
-        prio_s = f" p={self._plan_priority:.2f}" if self._plan_priority > 0 else ""
+        plan_s = f"[{plan_action}] {plan}" if plan_action else plan or "..."
+        prio_s = f" p={plan_priority:.2f}" if plan_priority > 0 else ""
         out += f"{DIM} 📋 {GREEN}{trunc(plan_s, w-12)}{DIM}{prio_s}{RESET}"
 
         # Row 8 — default mode / dream / dissonance
         out += mv(8); out += clr()
-        dmn_s   = trunc(self._dmn, 45) if self._dmn else "idle"
+        dmn_s   = trunc(dmn, 45) if dmn else "idle"
         parts   = [f"dmn:{BLUE}{dmn_s}{RESET}"]
-        if self._dream_tone:   parts.append(f"{DIM}dream:{self._dream_tone}{RESET}")
-        if self._imagination:  parts.append(f"{DIM}novelty:{self._imagination:.2f}{RESET}")
-        if self._dissonance:   parts.append(f"{DIM}dissonance:{self._dissonance:.2f}{RESET}")
-        if self._insights:     parts.append(f"{DIM}insights:{self._insights}{RESET}")
+        if dream_tone:   parts.append(f"{DIM}dream:{dream_tone}{RESET}")
+        if imagination:  parts.append(f"{DIM}novelty:{imagination:.2f}{RESET}")
+        if dissonance:   parts.append(f"{DIM}dissonance:{dissonance:.2f}{RESET}")
+        if insights:     parts.append(f"{DIM}insights:{insights}{RESET}")
         out += f"{DIM} 🌙 {RESET}" + "  ".join(parts)
 
         # Row 9 — node layer activity
@@ -574,10 +635,10 @@ class GraceChat(Node):
         row9 = f" 📊 "
         for label, nodes in layers:
             total = len(nodes)
-            fired = sum(1 for n in nodes if self._fired.get(n,0) > 0)
-            calls = sum(self._fired.get(n,0) for n in nodes)
-            color = GREEN if fired==total else (YELLOW if fired>0 else RED)
-            row9 += f"{DIM}{label}:{color}{fired}/{total}{DIM}×{calls}  {RESET}"
+            active_in_layer = sum(1 for n in nodes if fired.get(n,0) > 0)
+            calls = sum(fired.get(n,0) for n in nodes)
+            color = GREEN if active_in_layer==total else (YELLOW if active_in_layer>0 else RED)
+            row9 += f"{DIM}{label}:{color}{active_in_layer}/{total}{DIM}×{calls}  {RESET}"
         out += row9
 
         # Row 10 — separator
@@ -590,6 +651,10 @@ class GraceChat(Node):
     # ── Chat — only You and GRACE ────────────────────────────────────────────
 
     def _chat(self, text):
+        """
+        Print a line into the scrolling chat region (below row 10).
+        Acquires lock to prevent interleaving with _redraw().
+        """
         with self._lock:
             print(text, flush=True)
 
@@ -611,16 +676,17 @@ class GraceChat(Node):
         self._pub_bundle.publish(b)
 
         wm = {
-            "timestamp":    time.time(),
+            "timestamp":      time.time(),
             "active_thought": text,
-            "phonological": [text[:80]],
-            "visuospatial": [],
+            "phonological":   [text[:80]],
+            "visuospatial":   [],
         }
         w = String(); w.data = json.dumps(wm)
         self._pub_wm.publish(w)
 
         with self._lock:
             self._fired["sensor_hub"] += 1
+            # FIX: reset salience on new turn so it doesn't stay pinned
             self._salience = 0.0
 
         self._waiting = True
@@ -649,11 +715,15 @@ def main():
     time.sleep(1.5)
     node._redraw()
 
+    # FIX: increase LLM timeout to 60s for large models on Jetson
+    LLM_TIMEOUT = 60.0
+
     try:
         while True:
             print(scur(), end="", flush=True)
-            emotion = node._emotion
-            blocked = node._blocked
+            with node._lock:
+                emotion = node._emotion
+                blocked = node._blocked
             color   = RED if blocked else CYAN
             print(f"{color}{BOLD}You [{emotion}]:{RESET} ", end="", flush=True)
 
@@ -670,7 +740,7 @@ def main():
                 node._chat(f"\n{GREEN}GRACE: Goodbye.{RESET}\n")
                 break
 
-            # ── Commands (shown inline, don't pollute chat) ───────────────────
+            # ── Commands ──────────────────────────────────────────────────────
             if user_input.lower() == "/dream":
                 d = String(); d.data = "{}"
                 node._pub_dream.publish(d)
@@ -678,17 +748,26 @@ def main():
                 continue
 
             if user_input.lower() == "/memory":
+                with node._lock:
+                    epi = node._epi_recalled or "—"
+                    sem = node._sem_recalled or "—"
+                    soc = node._social or "—"
+                    ident = node._identity or "—"
+                    ec = node._epi_count
+                    sc = node._sem_count
                 node._chat(
                     f"\n{CYAN}{BOLD}Memory snapshot:{RESET}\n"
-                    f"  {DIM}Episodic (×{node._epi_count}): {node._epi_recalled or '—'}{RESET}\n"
-                    f"  {DIM}Semantic (×{node._sem_count}): {node._sem_recalled or '—'}{RESET}\n"
-                    f"  {DIM}Social: {node._social or '—'}{RESET}\n"
-                    f"  {DIM}Identity: {node._identity or '—'}{RESET}\n")
+                    f"  {DIM}Episodic (×{ec}): {epi}{RESET}\n"
+                    f"  {DIM}Semantic (×{sc}): {sem}{RESET}\n"
+                    f"  {DIM}Social: {soc}{RESET}\n"
+                    f"  {DIM}Identity: {ident}{RESET}\n")
                 continue
 
             if user_input.lower() == "/nodes":
+                with node._lock:
+                    fired_copy = dict(node._fired)
                 lines = [f"\n{CYAN}{BOLD}Node activity:{RESET}"]
-                for name, count in sorted(node._fired.items(),
+                for name, count in sorted(fired_copy.items(),
                                           key=lambda x: x[1], reverse=True):
                     c = GREEN if count > 0 else RED
                     lines.append(
@@ -708,16 +787,17 @@ def main():
                     f"  {BOLD}quit{RESET}     exit\n")
                 continue
 
-            # ── Normal conversation — only You/GRACE in chat ──────────────────
+            # ── Normal conversation ───────────────────────────────────────────
             node._chat(f"{CYAN}You [{emotion}]:{RESET} {user_input}")
             node.send(user_input)
 
-            deadline = time.time() + 20.0
+            # FIX: longer timeout, poll more gently, no misleading "still thinking"
+            deadline = time.time() + LLM_TIMEOUT
             while node._waiting and time.time() < deadline:
-                time.sleep(0.1)
+                time.sleep(0.15)
 
             if node._waiting:
-                node._chat(f"{YELLOW}  (still thinking...){RESET}")
+                node._chat(f"{YELLOW}  ⌛ still processing... (reply will appear below){RESET}")
                 node._waiting = False
 
     except KeyboardInterrupt:
