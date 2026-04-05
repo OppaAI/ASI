@@ -1,25 +1,18 @@
 #!/usr/bin/env python3
 """
-talk_to_grace.py
+talk_to_grace.py  (fixed)
 Full-brain conversational interface.
-Every message you send activates the complete cognitive pipeline:
-sensors → unconscious → subconscious → conscious → conscience → action
 
-Split-screen UI:
-  ┌─────────────────────────────────────────────────────┐
-  │  ❤  emotion    ⚡ arousal    🎯 salience   ⚖ verdict │
-  │  💭  inner monologue (reflection)                    │
-  │  🧠  global workspace broadcast                      │
-  │  👁  qualia / phenomenal experience                  │
-  │  🗄  memory context                                  │
-  │  📋  executive plan                                  │
-  ├─────────────────────────────────────────────────────┤
-  │  scrolling chat                                      │
-  └─────────────────────────────────────────────────────┘
+FIXES:
+- Subscribes to /grace/conversation/debug to show memory recall status
+- Longer response timeout (30s) for slow LLMs
+- /memory command to dump recent episodic memories for diagnostics
+- /recall <query> command to test memory search
 """
 import json, threading, time, shutil, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from grace.utils.memory_store import MemoryStore
 
 # ── ANSI ──────────────────────────────────────────────────────────────────────
 CYAN    = "\033[96m"
@@ -42,7 +35,7 @@ def show_cur():        return "\033[?25h"
 def cls():             return "\033[2J"
 def scroll(t, b):      return f"\033[{t};{b}r"
 
-PANEL = 9   # number of fixed header lines
+PANEL = 10   # number of fixed header lines (added one for memory status)
 
 
 class GraceChat(Node):
@@ -74,6 +67,11 @@ class GraceChat(Node):
         self._meta_conf   = 0.0
         self._dmn         = ""
 
+        # NEW: memory debug info
+        self._mem_turns   = 0
+        self._mem_recalled = False
+        self._mem_status  = "no recalls yet"
+
         self._last_speech  = ""
         self._waiting      = False
         self._lock         = threading.Lock()
@@ -97,6 +95,8 @@ class GraceChat(Node):
             ("/grace/subconscious/social_recall",     self._on_social),
             ("/grace/speech/out",                     self._on_speech),
             ("/grace/action/log",                     self._on_action),
+            # NEW: conversation debug
+            ("/grace/conversation/debug",             self._on_conv_debug),
         ]
         for topic, cb in subs:
             self.create_subscription(String, topic, cb, 10)
@@ -116,7 +116,6 @@ class GraceChat(Node):
     def _on_reward(self, msg):
         try:
             d = json.loads(msg.data)
-            # reward shifts valence display subtly
             with self._lock:
                 self._valence = max(0.0, min(1.0,
                     self._valence * 0.9 + (d.get("value", 0) + 1) / 2 * 0.1))
@@ -196,10 +195,7 @@ class GraceChat(Node):
         except Exception: pass
 
     def _on_narrative(self, msg):
-        try:
-            d = json.loads(msg.data)
-            # narrative self updates are slow — just note it fired
-        except Exception: pass
+        pass  # just acknowledge
 
     def _on_qualia(self, msg):
         try:
@@ -276,6 +272,22 @@ class GraceChat(Node):
                     f"{f' → {goal[:40]}' if goal else ''}{RESET}")
         except Exception: pass
 
+    # NEW: conversation debug callback
+    def _on_conv_debug(self, msg):
+        try:
+            d = json.loads(msg.data)
+            with self._lock:
+                self._mem_turns   = d.get("turns_in_context", 0)
+                self._mem_recalled = d.get("recalled_memories", False)
+                summary = d.get("recall_summary", "")
+                self._mem_status  = (
+                    f"recalled ✓ — {summary[:50]}"
+                    if self._mem_recalled
+                    else f"no match ({self._mem_turns} turns in ctx)"
+                )
+            self._redraw()
+        except Exception: pass
+
     # ── Panel ─────────────────────────────────────────────────────────────────
 
     def _redraw(self):
@@ -283,15 +295,15 @@ class GraceChat(Node):
 
         def trunc(s, n): return str(s)[:n] if s else "..."
 
-        # Emotion bar
         val_bar = int(self._valence * 10)
         aro_bar = int(self._arousal * 10)
         val_str = f"{'█' * val_bar}{'░' * (10 - val_bar)}"
         aro_str = f"{'█' * aro_bar}{'░' * (10 - aro_bar)}"
 
-        # Verdict colour
         vc = RED if self._verdict == "immoral" else (
              GREEN if self._verdict == "moral" else YELLOW)
+
+        mem_color = GREEN if self._mem_recalled else DIM
 
         out = save()
         out += move(1); out += clr()
@@ -328,7 +340,11 @@ class GraceChat(Node):
             out += f"dmn: {trunc(self._dmn, w-30)}"
         out += RESET
 
+        # NEW: memory status line
         out += move(9); out += clr()
+        out += f"{DIM}  🧩  memory: {mem_color}{self._mem_status}{RESET}"
+
+        out += move(10); out += clr()
         out += f"{DIM}{'─' * w}{RESET}"
 
         out += restore()
@@ -361,15 +377,54 @@ class GraceChat(Node):
 
         # 3. Working memory — triggers episodic + semantic recall
         wm = {
-            "timestamp":     time.time(),
+            "timestamp":      time.time(),
             "active_thought": text,
-            "phonological":  [text[:80]],
-            "visuospatial":  [],
+            "phonological":   [text[:80]],
+            "visuospatial":   [],
         }
         w = String(); w.data = json.dumps(wm)
         self._pub_wm.publish(w)
 
         self._waiting = True
+
+    # ── Diagnostics ───────────────────────────────────────────────────────────
+
+    def dump_memories(self, db_path: str = "/home/grace/memory/episodic.json",
+                      n: int = 10):
+        """Print the most recent episodic memories directly from disk."""
+        try:
+            store = MemoryStore(db_path, max_entries=500)
+            entries = store.tail(n)
+            self._chat_print(
+                f"\n{CYAN}{BOLD}── Last {n} episodic memories ──{RESET}")
+            for i, e in enumerate(entries, 1):
+                content = e.get("content", str(e))[:120]
+                ts = e.get("timestamp", 0)
+                t_str = time.strftime("%m/%d %H:%M", time.localtime(ts)) if ts else "?"
+                self._chat_print(
+                    f"{DIM}  {i:2}. [{t_str}] {CYAN}{content}{RESET}")
+            if not entries:
+                self._chat_print(f"{YELLOW}  No episodic memories found.{RESET}")
+            self._chat_print("")
+        except Exception as e:
+            self._chat_print(f"{RED}  Error reading memories: {e}{RESET}")
+
+    def recall_test(self, query: str,
+                    db_path: str = "/home/grace/memory/episodic.json"):
+        """Test memory recall for a query directly (bypasses LLM)."""
+        try:
+            store = MemoryStore(db_path, max_entries=500)
+            hits = store.search(query, top_k=5)
+            self._chat_print(
+                f"\n{CYAN}{BOLD}── Recall test: '{query}' ──{RESET}")
+            for i, hit in enumerate(hits, 1):
+                content = hit.get("content", str(hit))[:120]
+                self._chat_print(f"{DIM}  {i}. {CYAN}{content}{RESET}")
+            if not hits:
+                self._chat_print(f"{YELLOW}  No matches found.{RESET}")
+            self._chat_print("")
+        except Exception as e:
+            self._chat_print(f"{RED}  Error: {e}{RESET}")
 
 
 def spin_thread(node):
@@ -416,7 +471,7 @@ def main():
                 node._chat_print(f"\n{GREEN}GRACE: Goodbye.{RESET}\n")
                 break
 
-            # Special commands
+            # ── Special commands ──────────────────────────────────────────────
             if user_input.lower() == "/dream":
                 d = String(); d.data = "{}"
                 node._pub_dream.publish(d)
@@ -432,14 +487,33 @@ def main():
                     f"sem_recalls={node._sem_count}{RESET}")
                 continue
 
+            if user_input.lower() == "/memory":
+                node.dump_memories()
+                continue
+
+            if user_input.lower().startswith("/recall "):
+                query = user_input[8:].strip()
+                node.recall_test(query)
+                continue
+
+            if user_input.lower() == "/help":
+                node._chat_print(
+                    f"{CYAN}  Commands:{RESET}\n"
+                    f"  /dream        — trigger a dream cycle\n"
+                    f"  /memory       — dump last 10 episodic memories\n"
+                    f"  /recall <q>   — test memory search for query\n"
+                    f"  /status       — show brain state\n"
+                    f"  quit / exit   — leave\n")
+                continue
+
             # Echo input
             node._chat_print(
                 f"{CYAN}You [{emotion}]:{RESET} {user_input}")
 
             node.send(user_input)
 
-            # Wait for speech response
-            deadline = time.time() + 20.0
+            # Wait for speech response — 30s timeout (slow LLMs need this)
+            deadline = time.time() + 30.0
             while node._waiting and time.time() < deadline:
                 time.sleep(0.1)
 

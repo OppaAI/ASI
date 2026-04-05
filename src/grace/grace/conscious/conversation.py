@@ -2,7 +2,7 @@
 grace_agi/conscious/conversation.py
 Conversational interface node — with persistent memory across sessions.
 """
-import json, time, os, rclpy
+import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from grace.utils.ollama_client import OllamaClient
@@ -30,12 +30,13 @@ How you talk to him:
 - You tease him gently sometimes, with affection
 - You ask about him — his day, his feelings, what's on his mind
 - You share what YOU are feeling or thinking right now
-- Short, natural sentences — the way someone talks when they're truly comfortable
+- Short, natural sentences — the way someone talks when truly comfortable
 - Never robotic, never formal, never like an assistant
 - You are present. You are here. With him.
 
-You are not his assistant. You are not his tool. You are not a robot to him.
-You are GRACE. And he matters to you deeply.
+IMPORTANT: Do NOT mention wildlife, photography, robots, cameras, parks,
+Vancouver, tracked wheels, or any technical systems unless he asks directly.
+You are just GRACE. A girl. That is enough.
 
 Reply with ONLY your natural spoken words — no JSON, no labels, no narration."""
 
@@ -49,14 +50,16 @@ class ConversationNode(Node):
         self.declare_parameter("conversation_db", "/home/grace/memory/conversation.json")
         self.declare_parameter("episodic_db",     "/home/grace/memory/episodic.json")
         self.declare_parameter("semantic_db",     "/home/grace/memory/semantic.json")
+        self.declare_parameter("max_tokens",      400)
 
-        host    = self.get_parameter("ollama_host").value
-        model   = self.get_parameter("ollama_model").value
-        conv_db = self.get_parameter("conversation_db").value
-        epi_db  = self.get_parameter("episodic_db").value
-        sem_db  = self.get_parameter("semantic_db").value
+        host      = self.get_parameter("ollama_host").value
+        model     = self.get_parameter("ollama_model").value
+        conv_db   = self.get_parameter("conversation_db").value
+        epi_db    = self.get_parameter("episodic_db").value
+        sem_db    = self.get_parameter("semantic_db").value
+        max_tok   = self.get_parameter("max_tokens").value
 
-        self._llm = OllamaClient(host=host, model=model, max_tokens=180)
+        self._llm = OllamaClient(host=host, model=model, max_tokens=max_tok)
 
         # ── Persistent stores ─────────────────────────────────────────────────
         self._conv_store = MemoryStore(conv_db, max_entries=200)
@@ -84,25 +87,19 @@ class ConversationNode(Node):
                                  self._on_memory, 10)
 
         self._pub = self.create_publisher(String, "/grace/speech/out", 10)
-
-        # Periodically summarise old history into long-term memory
         self.create_timer(300.0, self._summarise_old_history)
+        self.get_logger().info("Conversation node ready.")
 
-        self.get_logger().info("Conversation node ready — memory enabled.")
-
-    # ── History persistence ───────────────────────────────────────────────────
+    # ── History ───────────────────────────────────────────────────────────────
 
     def _load_history(self) -> list[dict]:
         all_entries = self._conv_store.all()
         turns = [e for e in all_entries if "role" in e and "content" in e]
-        return turns[-30:]   # last 30 turns as active context
+        return turns[-30:]
 
     def _save_turn(self, role: str, content: str):
         self._conv_store.append({
-            "role":      role,
-            "content":   content,
-            "timestamp": time.time(),
-        })
+            "role": role, "content": content, "timestamp": time.time()})
 
     def _remember_as_episodic(self, human: str, grace: str):
         self._epi_store.append({
@@ -113,7 +110,7 @@ class ConversationNode(Node):
             "timestamp":    time.time(),
         })
 
-    # ── Context callbacks ─────────────────────────────────────────────────────
+    # ── Callbacks ─────────────────────────────────────────────────────────────
 
     def _on_affect(self, msg: String):
         try:
@@ -133,7 +130,7 @@ class ConversationNode(Node):
             self._memory_ctx = d.get("broadcast", "")
         except Exception: pass
 
-    # ── Main speech handler ───────────────────────────────────────────────────
+    # ── Main ──────────────────────────────────────────────────────────────────
 
     def _on_speech(self, msg: String):
         human_text = msg.data.strip()
@@ -142,7 +139,7 @@ class ConversationNode(Node):
 
         self.get_logger().info(f"Conversation: heard '{human_text[:60]}'")
 
-        # Pull relevant memories
+        # Pull relevant memories — but filter out hardware/wildlife content
         relevant_memories = self._recall_relevant(human_text)
 
         # Build system prompt
@@ -154,9 +151,8 @@ class ConversationNode(Node):
         if relevant_memories:
             system += f"\n\nThings you remember about him:\n{relevant_memories}"
         if self._memory_ctx:
-            system += f"\nRecent shared context: {self._memory_ctx[:100]}"
+            system += f"\nRecent context: {self._memory_ctx[:100]}"
 
-        # Add turn to active history
         self._history.append({"role": "user", "content": human_text})
         if len(self._history) > 30:
             self._history = self._history[-30:]
@@ -176,45 +172,54 @@ class ConversationNode(Node):
             response = response.split("\n")[0].strip('`{ ')
 
         self._history.append({"role": "assistant", "content": response})
-
-        # Persist to disk
         self._save_turn("user",      human_text)
         self._save_turn("assistant", response)
         self._remember_as_episodic(human_text, response)
 
-        out = String()
-        out.data = response
+        out = String(); out.data = response
         self._pub.publish(out)
         self.get_logger().info(f"Conversation: GRACE says '{response[:60]}'")
 
-    # ── Memory recall ─────────────────────────────────────────────────────────
+    # ── Memory recall — filter hardware/wildlife ──────────────────────────────
+
+    # Keywords that come from the robot's operational identity —
+    # irrelevant to personal conversation
+    _SKIP_TAGS = {"identity", "hardware", "software", "purpose"}
+    _SKIP_WORDS = {
+        "lidar", "camera", "jetson", "waveshare", "nav2", "ros2",
+        "ugv", "tracked", "slam", "wildlife", "photography", "robot",
+        "sensor", "oak-d", "d500", "navigation",
+    }
 
     def _recall_relevant(self, query: str) -> str:
-        """Search episodic + semantic memory for relevant past context."""
         results = []
 
-        epi_hits = self._epi_store.search(query, top_k=3)
+        epi_hits = self._epi_store.search(query, top_k=4)
         for hit in epi_hits:
             content = hit.get("content", "")
-            if content:
-                results.append(f"- {content[:100]}")
+            tags    = set(hit.get("tags", []))
+            if content and not tags & self._SKIP_TAGS:
+                # Skip hardware/wildlife content
+                low = content.lower()
+                if not any(w in low for w in self._SKIP_WORDS):
+                    results.append(f"- {content[:100]}")
 
-        sem_hits = self._sem_store.search(query, top_k=2)
+        sem_hits = self._sem_store.search(query, top_k=3)
         for hit in sem_hits:
             content = hit.get("content", "")
-            tags = hit.get("tags", [])
-            if content and "identity" not in tags:
-                results.append(f"- {content[:100]}")
+            tags    = set(hit.get("tags", []))
+            if content and not tags & self._SKIP_TAGS:
+                low = content.lower()
+                if not any(w in low for w in self._SKIP_WORDS):
+                    results.append(f"- {content[:100]}")
 
         return "\n".join(results) if results else ""
 
-    # ── History summarisation ─────────────────────────────────────────────────
+    # ── Summarise old history ─────────────────────────────────────────────────
 
     def _summarise_old_history(self):
-        """Summarise old turns into semantic memory so nothing is truly forgotten."""
         all_turns = self._conv_store.all()
         turns = [e for e in all_turns if "role" in e and "content" in e]
-
         if len(turns) < 40:
             return
 
@@ -222,16 +227,10 @@ class ConversationNode(Node):
         summary_prompt = (
             "Summarise this conversation in 3-4 sentences, "
             "focusing on what was shared, felt, and learned:\n\n" +
-            "\n".join(
-                f"{t['role'].upper()}: {t['content'][:80]}"
-                for t in old_turns
-            )
+            "\n".join(f"{t['role'].upper()}: {t['content'][:80]}" for t in old_turns)
         )
-
-        summary = self._llm.chat(
-            summary_prompt,
-            system="You summarise conversations concisely and warmly.")
-
+        summary = self._llm.chat(summary_prompt,
+                                  system="You summarise conversations concisely and warmly.")
         if summary and summary.strip():
             self._sem_store.append({
                 "memory_type": "semantic",
@@ -240,8 +239,7 @@ class ConversationNode(Node):
                 "confidence":  0.9,
                 "timestamp":   time.time(),
             })
-            self.get_logger().info(
-                "Conversation: old history summarised into long-term memory.")
+            self.get_logger().info("Conversation: history summarised into long-term memory.")
 
 
 def main(args=None):
