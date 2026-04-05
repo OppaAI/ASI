@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 """
-talk_to_grace.py  (fixed)
-Full-brain conversational interface.
+talk_to_grace.py  —  Full-brain conversational interface
+Only YOU and GRACE appear in the chat.
+Everything else (emotions, thoughts, memory, conscience, nodes) is in the fixed panel.
 
-FIXES:
-- Subscribes to /grace/conversation/debug to show memory recall status
-- Longer response timeout (30s) for slow LLMs
-- /memory command to dump recent episodic memories for diagnostics
-- /recall <query> command to test memory search
+Layout:
+  Row 1   ❤ emotion  valence  arousal  salience  meta  error  reward  ⚖ verdict  nodes
+  Row 2   💭 inner monologue
+  Row 3   ∴  symbolic conclusion
+  Row 4   🧠 global workspace
+  Row 5   👁 qualia
+  Row 6   🗄 memory context  epi× sem×
+  Row 7   📋 executive plan
+  Row 8   🌙 default mode / dream / dissonance
+  Row 9   📊 UNC:x/10  SUB:x/5  CON:x/11  CSC:x/3  QUA:x/1  DRM:x/4
+  Row 10  ──────────────────────────────────────────────────────────────
+  Row 11+ [scrolling] only You and GRACE
 """
 import json, threading, time, shutil, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.memory_store import MemoryStore
 
-# ── ANSI ──────────────────────────────────────────────────────────────────────
 CYAN    = "\033[96m"
 GREEN   = "\033[92m"
 YELLOW  = "\033[93m"
@@ -26,90 +32,147 @@ RESET   = "\033[0m"
 BOLD    = "\033[1m"
 DIM     = "\033[2m"
 
-def move(r, c=1):      return f"\033[{r};{c}H"
-def clr():             return "\033[2K"
-def save():            return "\033[s"
-def restore():         return "\033[u"
-def hide_cur():        return "\033[?25l"
-def show_cur():        return "\033[?25h"
-def cls():             return "\033[2J"
-def scroll(t, b):      return f"\033[{t};{b}r"
+mv   = lambda r, c=1: f"\033[{r};{c}H"
+clr  = lambda:        "\033[2K"
+sav  = lambda:        "\033[s"
+res  = lambda:        "\033[u"
+hcur = lambda:        "\033[?25l"
+scur = lambda:        "\033[?25h"
+cls  = lambda:        "\033[2J"
+scrl = lambda t, b:   f"\033[{t};{b}r"
 
-PANEL = 10   # number of fixed header lines (added one for memory status)
+PANEL = 10
+
+
+def bar(val, width=7, color=GREEN):
+    filled = int(max(0.0, min(1.0, float(val))) * width)
+    return f"{color}{'█'*filled}{'░'*(width-filled)}{RESET}"
+
+
+def trunc(s, n):
+    s = str(s) if s else "..."
+    return (s[:n-1] + "…") if len(s) > n else s
 
 
 class GraceChat(Node):
     def __init__(self):
         super().__init__("grace_chat")
 
-        # ── Publishers ────────────────────────────────────────────────────────
-        self._pub_audio   = self.create_publisher(String, "/grace/audio/in",            10)
-        self._pub_bundle  = self.create_publisher(String, "/grace/sensors/bundle",       10)
-        self._pub_wm      = self.create_publisher(String, "/grace/conscious/working_memory", 10)
-        self._pub_dream   = self.create_publisher(String, "/grace/dreaming/trigger",     10)
+        # Publishers
+        self._pub_audio  = self.create_publisher(String, "/grace/audio/in",                10)
+        self._pub_bundle = self.create_publisher(String, "/grace/sensors/bundle",           10)
+        self._pub_wm     = self.create_publisher(String, "/grace/conscious/working_memory", 10)
+        self._pub_dream  = self.create_publisher(String, "/grace/dreaming/trigger",         10)
 
         # ── Brain state ───────────────────────────────────────────────────────
-        self._emotion     = "serene"
-        self._arousal     = 0.3
-        self._valence     = 0.6
-        self._salience    = 0.0
-        self._monologue   = "..."
-        self._conclusion  = ""
-        self._broadcast   = "..."
-        self._qualia      = "..."
-        self._memory_ctx  = "..."
-        self._plan        = ""
-        self._verdict     = "neutral"
-        self._verdict_conf= 0.0
-        self._blocked     = False
-        self._epi_count   = 0
-        self._sem_count   = 0
-        self._meta_conf   = 0.0
-        self._dmn         = ""
+        self._emotion       = "serene"
+        self._valence       = 0.6
+        self._arousal       = 0.3
+        self._salience      = 0.0
+        self._reward        = 0.0
+        self._pred_error    = 0.0
+        self._meta_conf     = 0.0
+        self._dissonance    = 0.0
+        self._precision     = 0.75
 
-        # NEW: memory debug info
-        self._mem_turns   = 0
-        self._mem_recalled = False
-        self._mem_status  = "no recalls yet"
+        self._monologue     = "..."
+        self._conclusion    = ""
+        self._broadcast     = "..."
+        self._qualia        = "..."
+        self._unity         = 0.0
+        self._ineffable     = False
+        self._memory_ctx    = "..."
+        self._epi_recalled  = ""
+        self._sem_recalled  = ""
+        self._proc_skills   = ""
+        self._social        = ""
+        self._epi_count     = 0
+        self._sem_count     = 0
 
-        self._last_speech  = ""
-        self._waiting      = False
-        self._lock         = threading.Lock()
+        self._plan          = ""
+        self._plan_action   = ""
+        self._plan_priority = 0.0
+        self._wm_thought    = ""
+        self._dmn           = ""
+        self._identity      = ""
 
-        # ── Subscriptions — every brain topic ─────────────────────────────────
+        self._verdict       = "neutral"
+        self._verdict_conf  = 0.0
+        self._blocked       = False
+        self._moral_risk    = 0.0
+        self._verse         = ""
+
+        self._dream_tone    = ""
+        self._imagination   = 0.0
+        self._insights      = 0
+
+        self._fired = {n: 0 for n in [
+            "sensor_hub",
+            "predictive_processing","prediction_error","thalamic_gate",
+            "affective_core","reward_motivation","implicit_memory",
+            "relevance_system","personality_core","preferences_values","hyper_model",
+            "episodic_memory","semantic_memory","procedural_memory",
+            "social_cognition","attitudes",
+            "moral_knowledge","moral_reasoning","conscience_core",
+            "qualia_binding",
+            "working_memory","memory_coordinator","global_workspace",
+            "reflection","metacognition","central_executive","salience_network",
+            "default_mode","narrative_self","action_execution","conversation",
+            "dreaming_process","imagination","distillation","consolidation",
+        ]}
+
+        self._last_speech = ""
+        self._waiting     = False
+        self._lock        = threading.Lock()
+
+        # Subscriptions
         subs = [
-            ("/grace/unconscious/affective_state",    self._on_affect),
-            ("/grace/unconscious/reward",             self._on_reward),
-            ("/grace/conscious/global_workspace",     self._on_gw),
-            ("/grace/conscious/reflection",           self._on_reflection),
-            ("/grace/conscious/metacognition",        self._on_meta),
-            ("/grace/conscious/salience",             self._on_salience),
-            ("/grace/conscious/executive_plan",       self._on_plan),
-            ("/grace/conscious/memory_context",       self._on_memory),
-            ("/grace/conscious/dmn",                  self._on_dmn),
-            ("/grace/conscious/narrative_self",       self._on_narrative),
-            ("/grace/qualia/field",                   self._on_qualia),
-            ("/grace/conscience/verdict",             self._on_verdict),
-            ("/grace/subconscious/episodic_recall",   self._on_episodic),
-            ("/grace/subconscious/semantic_recall",   self._on_semantic),
-            ("/grace/subconscious/social_recall",     self._on_social),
-            ("/grace/speech/out",                     self._on_speech),
-            ("/grace/action/log",                     self._on_action),
-            # NEW: conversation debug
-            ("/grace/conversation/debug",             self._on_conv_debug),
+            ("/grace/unconscious/affective_state",      self._on_affect),
+            ("/grace/unconscious/reward",               self._on_reward),
+            ("/grace/unconscious/relevance",            self._on_relevance),
+            ("/grace/unconscious/prediction_errors",    self._on_pred),
+            ("/grace/unconscious/thalamic_broadcast",   self._on_thalamic),
+            ("/grace/unconscious/personality",          self._on_personality),
+            ("/grace/unconscious/values",               self._on_values),
+            ("/grace/unconscious/precision",            self._on_precision),
+            ("/grace/subconscious/episodic_recall",     self._on_episodic),
+            ("/grace/subconscious/semantic_recall",     self._on_semantic),
+            ("/grace/subconscious/procedural_recall",   self._on_procedural),
+            ("/grace/subconscious/social_recall",       self._on_social),
+            ("/grace/subconscious/attitudes",           self._on_attitudes),
+            ("/grace/conscious/global_workspace",       self._on_gw),
+            ("/grace/conscious/salience",               self._on_salience),
+            ("/grace/conscious/reflection",             self._on_reflection),
+            ("/grace/conscious/metacognition",          self._on_meta),
+            ("/grace/conscious/executive_plan",         self._on_plan),
+            ("/grace/conscious/memory_context",         self._on_memory),
+            ("/grace/conscious/working_memory",         self._on_wm),
+            ("/grace/conscious/dmn",                    self._on_dmn),
+            ("/grace/conscious/narrative_self",         self._on_narrative),
+            ("/grace/conscience/situation",             self._on_situation),
+            ("/grace/conscience/reasoning",             self._on_reasoning),
+            ("/grace/conscience/verdict",               self._on_verdict),
+            ("/grace/qualia/field",                     self._on_qualia),
+            ("/grace/dreaming/dream_content",           self._on_dream),
+            ("/grace/dreaming/imagination",             self._on_imagination),
+            ("/grace/dreaming/distillation",            self._on_distillation),
+            ("/grace/dreaming/consolidation",           self._on_consolidation),
+            ("/grace/speech/out",                       self._on_speech),
+            ("/grace/action/log",                       self._on_action),
         ]
         for topic, cb in subs:
             self.create_subscription(String, topic, cb, 10)
 
-    # ── Callbacks ─────────────────────────────────────────────────────────────
+    # ── Unconscious ───────────────────────────────────────────────────────────
 
     def _on_affect(self, msg):
         try:
             d = json.loads(msg.data)
             with self._lock:
-                self._emotion  = d.get("emotion_label", self._emotion)
-                self._arousal  = d.get("arousal",  self._arousal)
-                self._valence  = d.get("valence",  self._valence)
+                self._emotion    = d.get("emotion_label", self._emotion)
+                self._valence    = d.get("valence",  self._valence)
+                self._arousal    = d.get("arousal",  self._arousal)
+                self._fired["affective_core"] += 1
             self._redraw()
         except Exception: pass
 
@@ -117,21 +180,133 @@ class GraceChat(Node):
         try:
             d = json.loads(msg.data)
             with self._lock:
-                self._valence = max(0.0, min(1.0,
-                    self._valence * 0.9 + (d.get("value", 0) + 1) / 2 * 0.1))
+                self._reward = d.get("value", 0.0)
+                self._fired["reward_motivation"] += 1
             self._redraw()
         except Exception: pass
+
+    def _on_relevance(self, msg):
+        try:
+            d = json.loads(msg.data)
+            with self._lock:
+                self._salience = max(self._salience, d.get("score", 0.0))
+                self._fired["relevance_system"] += 1
+        except Exception: pass
+
+    def _on_pred(self, msg):
+        try:
+            d = json.loads(msg.data)
+            with self._lock:
+                self._pred_error = d.get("error_magnitude", 0.0)
+                self._fired["predictive_processing"] += 1
+                self._fired["prediction_error"] += 1
+        except Exception: pass
+
+    def _on_thalamic(self, msg):
+        try:
+            with self._lock:
+                self._fired["thalamic_gate"] += 1
+        except Exception: pass
+
+    def _on_personality(self, msg):
+        try:
+            with self._lock:
+                self._fired["personality_core"] += 1
+        except Exception: pass
+
+    def _on_values(self, msg):
+        try:
+            with self._lock:
+                self._fired["preferences_values"] += 1
+        except Exception: pass
+
+    def _on_precision(self, msg):
+        try:
+            d = json.loads(msg.data)
+            with self._lock:
+                self._precision = d.get("global_confidence", self._precision)
+                self._fired["hyper_model"] += 1
+        except Exception: pass
+
+    # ── Subconscious ──────────────────────────────────────────────────────────
+
+    def _on_episodic(self, msg):
+        try:
+            d = json.loads(msg.data)
+            recalled = d.get("recalled", [])
+            if recalled:
+                first = recalled[0]
+                c = first.get("content", str(first)) if isinstance(first, dict) else str(first)
+                with self._lock:
+                    self._epi_recalled = c[:70]
+                    self._epi_count   += 1
+                    self._fired["episodic_memory"] += 1
+                self._redraw()
+        except Exception: pass
+
+    def _on_semantic(self, msg):
+        try:
+            d = json.loads(msg.data)
+            recalled = d.get("recalled", [])
+            if recalled:
+                first = recalled[0]
+                c = first.get("content", str(first)) if isinstance(first, dict) else str(first)
+                with self._lock:
+                    self._sem_recalled = c[:70]
+                    self._sem_count   += 1
+                    self._fired["semantic_memory"] += 1
+                self._redraw()
+        except Exception: pass
+
+    def _on_procedural(self, msg):
+        try:
+            d = json.loads(msg.data)
+            skills = d.get("skills", [])
+            if skills:
+                with self._lock:
+                    self._proc_skills = ", ".join(
+                        s.get("skill","?") for s in skills[:3])
+                    self._fired["procedural_memory"] += 1
+        except Exception: pass
+
+    def _on_social(self, msg):
+        try:
+            d = json.loads(msg.data)
+            gd = d.get("group_dynamic", "")
+            if gd:
+                with self._lock:
+                    self._social = gd
+                    self._fired["social_cognition"] += 1
+        except Exception: pass
+
+    def _on_attitudes(self, msg):
+        try:
+            d = json.loads(msg.data)
+            with self._lock:
+                self._dissonance = d.get("dissonance_level", 0.0)
+                self._fired["attitudes"] += 1
+        except Exception: pass
+
+    # ── Conscious ─────────────────────────────────────────────────────────────
 
     def _on_gw(self, msg):
         try:
             d = json.loads(msg.data)
-            bc  = d.get("broadcast", "")
-            sal = d.get("salience", 0)
+            bc = d.get("broadcast", "")
             if bc:
                 with self._lock:
                     self._broadcast = bc
-                    self._salience  = sal
+                    self._salience  = max(self._salience, d.get("salience", 0.0))
+                    self._fired["global_workspace"] += 1
                 self._redraw()
+        except Exception: pass
+
+    def _on_salience(self, msg):
+        try:
+            d = json.loads(msg.data)
+            with self._lock:
+                self._salience = max(self._salience, d.get("salience", 0.0))
+                self._fired["salience_network"] += 1
         except Exception: pass
 
     def _on_reflection(self, msg):
@@ -143,6 +318,7 @@ class GraceChat(Node):
                 with self._lock:
                     self._monologue  = mono
                     self._conclusion = conc
+                    self._fired["reflection"] += 1
                 self._redraw()
         except Exception: pass
 
@@ -151,15 +327,7 @@ class GraceChat(Node):
             d = json.loads(msg.data)
             with self._lock:
                 self._meta_conf = d.get("confidence_in_own_reasoning", self._meta_conf)
-            self._redraw()
-        except Exception: pass
-
-    def _on_salience(self, msg):
-        try:
-            d = json.loads(msg.data)
-            sal = d.get("salience", 0)
-            with self._lock:
-                self._salience = max(self._salience, sal)
+                self._fired["metacognition"] += 1
             self._redraw()
         except Exception: pass
 
@@ -168,10 +336,14 @@ class GraceChat(Node):
             d = json.loads(msg.data)
             goal  = d.get("goal", "")
             steps = d.get("steps", [])
-            action = steps[0].get("action", "") if steps else ""
+            act   = steps[0].get("action","") if steps else ""
+            prio  = d.get("priority", 0.0)
             if goal:
                 with self._lock:
-                    self._plan = f"{action} → {goal[:60]}" if action else goal[:70]
+                    self._plan          = goal[:55]
+                    self._plan_action   = act
+                    self._plan_priority = prio
+                    self._fired["central_executive"] += 1
                 self._redraw()
         except Exception: pass
 
@@ -182,188 +354,251 @@ class GraceChat(Node):
             if bc:
                 with self._lock:
                     self._memory_ctx = bc
+                    self._fired["memory_coordinator"] += 1
                 self._redraw()
+        except Exception: pass
+
+    def _on_wm(self, msg):
+        try:
+            d = json.loads(msg.data)
+            t = d.get("active_thought","")
+            with self._lock:
+                self._wm_thought = t
+                self._fired["working_memory"] += 1
         except Exception: pass
 
     def _on_dmn(self, msg):
         try:
             d = json.loads(msg.data)
-            sim = d.get("narrative_simulation", "")
+            sim = d.get("narrative_simulation","")
             if sim:
                 with self._lock:
-                    self._dmn = sim
+                    self._dmn = sim[:70]
+                    self._fired["default_mode"] += 1
+                self._redraw()
         except Exception: pass
 
     def _on_narrative(self, msg):
-        pass  # just acknowledge
-
-    def _on_qualia(self, msg):
         try:
             d = json.loads(msg.data)
-            pc = d.get("phenomenal_content", "")
-            if pc:
+            ident = d.get("identity_summary","")
+            if ident:
                 with self._lock:
-                    self._qualia = pc
-                self._redraw()
+                    self._identity = ident[:60]
+                    self._fired["narrative_self"] += 1
+        except Exception: pass
+
+    # ── Conscience ────────────────────────────────────────────────────────────
+
+    def _on_situation(self, msg):
+        try:
+            with self._lock:
+                self._fired["conscience_core"] += 1
+        except Exception: pass
+
+    def _on_reasoning(self, msg):
+        try:
+            d = json.loads(msg.data)
+            with self._lock:
+                self._moral_risk = d.get("overall_moral_risk", 0.0)
+                self._fired["moral_reasoning"] += 1
+            self._redraw()
         except Exception: pass
 
     def _on_verdict(self, msg):
         try:
             d = json.loads(msg.data)
             with self._lock:
-                self._verdict      = d.get("verdict", "neutral")
-                self._verdict_conf = d.get("confidence", 0.0)
+                self._verdict      = d.get("verdict",      "neutral")
+                self._verdict_conf = d.get("confidence",   0.0)
                 self._blocked      = d.get("block_action", False)
+                self._verse        = d.get("verse_reference","")
+                self._fired["conscience_core"] += 1
             self._redraw()
-            if self._blocked:
-                self._chat_print(
-                    f"{RED}{BOLD}  ⚖  CONSCIENCE VETO:{RESET} "
-                    f"{RED}{d.get('reasoning','')[:70]}{RESET}")
         except Exception: pass
 
-    def _on_episodic(self, msg):
+    # ── Qualia ────────────────────────────────────────────────────────────────
+
+    def _on_qualia(self, msg):
         try:
             d = json.loads(msg.data)
-            recalled = d.get("recalled", [])
-            if recalled:
+            pc = d.get("phenomenal_content","")
+            if pc:
                 with self._lock:
-                    self._epi_count += 1
-                self._chat_print(
-                    f"{BLUE}{DIM}  🗄  Episodic recall: "
-                    f"{str(recalled[0])[:80]}{RESET}")
+                    self._qualia    = pc[:80]
+                    self._unity     = d.get("unity_score", 0.0)
+                    self._ineffable = d.get("ineffability_flag", False)
+                    self._fired["qualia_binding"] += 1
+                self._redraw()
         except Exception: pass
 
-    def _on_semantic(self, msg):
+    # ── Dreaming ──────────────────────────────────────────────────────────────
+
+    def _on_dream(self, msg):
         try:
             d = json.loads(msg.data)
-            recalled = d.get("recalled", [])
-            if recalled:
+            tone = d.get("emotional_tone","")
+            if tone:
                 with self._lock:
-                    self._sem_count += 1
-                self._chat_print(
-                    f"{BLUE}{DIM}  📚  Semantic recall: "
-                    f"{str(recalled[0])[:80]}{RESET}")
+                    self._dream_tone = tone
+                    self._fired["dreaming_process"] += 1
+                self._redraw()
         except Exception: pass
 
-    def _on_social(self, msg):
+    def _on_imagination(self, msg):
         try:
             d = json.loads(msg.data)
-            gd = d.get("group_dynamic", "")
-            if gd:
-                self._chat_print(
-                    f"{CYAN}{DIM}  👥  Social: {gd}{RESET}")
+            with self._lock:
+                self._imagination = d.get("novelty_score", 0.0)
+                self._fired["imagination"] += 1
+            self._redraw()
         except Exception: pass
+
+    def _on_distillation(self, msg):
+        try:
+            d = json.loads(msg.data)
+            with self._lock:
+                self._insights += len(d.get("insights",[]))
+                self._fired["distillation"] += 1
+        except Exception: pass
+
+    def _on_consolidation(self, msg):
+        try:
+            with self._lock:
+                self._fired["consolidation"] += 1
+            self._redraw()
+        except Exception: pass
+
+    # ── Output — ONLY these go to chat ───────────────────────────────────────
 
     def _on_speech(self, msg):
         text = msg.data.strip()
         if text and text != self._last_speech:
             self._last_speech = text
-            self._chat_print(f"\n{GREEN}{BOLD}GRACE:{RESET} {GREEN}{text}{RESET}\n")
+            with self._lock:
+                self._fired["conversation"] += 1
+            self._chat(f"\n{GREEN}{BOLD}GRACE:{RESET} {GREEN}{text}{RESET}\n")
             self._waiting = False
 
     def _on_action(self, msg):
         try:
-            d = json.loads(msg.data)
-            action = d.get("action", "")
-            goal   = d.get("goal", "")
-            if action and action != "speak":
-                self._chat_print(
-                    f"{YELLOW}{DIM}  ⚙  Action: {action}"
-                    f"{f' → {goal[:40]}' if goal else ''}{RESET}")
-        except Exception: pass
-
-    # NEW: conversation debug callback
-    def _on_conv_debug(self, msg):
-        try:
-            d = json.loads(msg.data)
             with self._lock:
-                self._mem_turns   = d.get("turns_in_context", 0)
-                self._mem_recalled = d.get("recalled_memories", False)
-                summary = d.get("recall_summary", "")
-                self._mem_status  = (
-                    f"recalled ✓ — {summary[:50]}"
-                    if self._mem_recalled
-                    else f"no match ({self._mem_turns} turns in ctx)"
-                )
-            self._redraw()
+                self._fired["action_execution"] += 1
         except Exception: pass
 
     # ── Panel ─────────────────────────────────────────────────────────────────
 
     def _redraw(self):
-        w = shutil.get_terminal_size((100, 30)).columns
+        w = shutil.get_terminal_size((110, 30)).columns
 
-        def trunc(s, n): return str(s)[:n] if s else "..."
+        vc = (RED    if self._verdict == "immoral"   else
+              GREEN  if self._verdict == "moral"     else
+              YELLOW if self._verdict == "uncertain" else DIM)
 
-        val_bar = int(self._valence * 10)
-        aro_bar = int(self._arousal * 10)
-        val_str = f"{'█' * val_bar}{'░' * (10 - val_bar)}"
-        aro_str = f"{'█' * aro_bar}{'░' * (10 - aro_bar)}"
+        layers = [
+            ("UNC", ["affective_core","reward_motivation","predictive_processing",
+                     "prediction_error","thalamic_gate","relevance_system",
+                     "implicit_memory","personality_core","preferences_values","hyper_model"]),
+            ("SUB", ["episodic_memory","semantic_memory","procedural_memory",
+                     "social_cognition","attitudes"]),
+            ("CON", ["global_workspace","working_memory","salience_network",
+                     "reflection","metacognition","central_executive",
+                     "memory_coordinator","default_mode","narrative_self",
+                     "action_execution","conversation"]),
+            ("CSC", ["moral_knowledge","moral_reasoning","conscience_core"]),
+            ("QUA", ["qualia_binding"]),
+            ("DRM", ["dreaming_process","imagination","distillation","consolidation"]),
+        ]
 
-        vc = RED if self._verdict == "immoral" else (
-             GREEN if self._verdict == "moral" else YELLOW)
+        active_nodes = sum(1 for v in self._fired.values() if v > 0)
+        total_nodes  = len(self._fired)
 
-        mem_color = GREEN if self._mem_recalled else DIM
+        out = sav()
 
-        out = save()
-        out += move(1); out += clr()
-        out += f"{CYAN}{BOLD}  GRACE  {RESET}"
-        out += f"{DIM}valence {MAGENTA}{val_str}{RESET}  "
-        out += f"{DIM}arousal {YELLOW}{aro_str}{RESET}  "
-        out += f"{MAGENTA}{BOLD}{self._emotion:<12}{RESET}  "
-        out += f"{DIM}meta:{GREEN}{self._meta_conf:.2f}{RESET}  "
-        out += f"{DIM}sal:{CYAN}{self._salience:.2f}{RESET}  "
-        out += f"{vc}⚖ {self._verdict}({self._verdict_conf:.2f}){RESET}"
+        # Row 1 — vital signs
+        out += mv(1); out += clr()
+        out += f"{CYAN}{BOLD} GRACE {RESET}"
+        out += f" ❤{bar(self._valence,6,MAGENTA)}"
+        out += f" ⚡{bar(self._arousal,6,YELLOW)}"
+        out += f" 🎯{bar(self._salience,6,CYAN)}"
+        out += f" {MAGENTA}{BOLD}{self._emotion:<11}{RESET}"
+        out += f" {DIM}meta:{GREEN}{self._meta_conf:.2f}{RESET}"
+        out += f" {DIM}err:{YELLOW}{self._pred_error:.2f}{RESET}"
+        out += f" {DIM}rew:{GREEN if self._reward>=0 else RED}{self._reward:+.2f}{RESET}"
+        out += f" {vc}⚖{self._verdict}({self._verdict_conf:.2f}){RESET}"
+        out += f" {DIM}🔵{GREEN}{active_nodes}{DIM}/{total_nodes}{RESET}"
 
-        out += move(2); out += clr()
-        out += f"{DIM}  💭  {MAGENTA}{trunc(self._monologue, w-8)}{RESET}"
+        # Row 2 — inner monologue
+        out += mv(2); out += clr()
+        out += f"{DIM} 💭 {MAGENTA}{trunc(self._monologue, w-6)}{RESET}"
 
-        out += move(3); out += clr()
-        if self._conclusion:
-            out += f"{DIM}  ∴   {WHITE}{trunc(self._conclusion, w-8)}{RESET}"
+        # Row 3 — symbolic conclusion / active thought
+        out += mv(3); out += clr()
+        conc = self._conclusion or self._wm_thought or "..."
+        out += f"{DIM} ∴  {WHITE}{trunc(conc, w-6)}{RESET}"
 
-        out += move(4); out += clr()
-        out += f"{DIM}  🧠  {WHITE}{trunc(self._broadcast, w-8)}{RESET}"
+        # Row 4 — global workspace
+        out += mv(4); out += clr()
+        out += f"{DIM} 🧠 {WHITE}{trunc(self._broadcast, w-6)}{RESET}"
 
-        out += move(5); out += clr()
-        out += f"{DIM}  👁   {MAGENTA}{trunc(self._qualia, w-8)}{RESET}"
+        # Row 5 — qualia
+        out += mv(5); out += clr()
+        unity_s = f" Φ={self._unity:.2f}" if self._unity > 0 else ""
+        ineff_s = " ✦" if self._ineffable else ""
+        out += f"{DIM} 👁  {MAGENTA}{trunc(self._qualia, w-18)}{DIM}{unity_s}{ineff_s}{RESET}"
 
-        out += move(6); out += clr()
-        out += f"{DIM}  🗄   {CYAN}{trunc(self._memory_ctx, w-8)}{RESET}"
+        # Row 6 — memory context + recall counts
+        out += mv(6); out += clr()
+        mem_right = f"  {DIM}epi×{self._epi_count} sem×{self._sem_count}{RESET}"
+        mem_w = w - 6 - len(f"  epi×{self._epi_count} sem×{self._sem_count}")
+        out += f"{DIM} 🗄  {CYAN}{trunc(self._memory_ctx, mem_w)}{RESET}{mem_right}"
 
-        out += move(7); out += clr()
-        out += f"{DIM}  📋  {GREEN}{trunc(self._plan, w-8)}{RESET}"
+        # Row 7 — executive plan
+        out += mv(7); out += clr()
+        plan_s = f"[{self._plan_action}] {self._plan}" if self._plan_action else self._plan or "..."
+        prio_s = f" p={self._plan_priority:.2f}" if self._plan_priority > 0 else ""
+        out += f"{DIM} 📋 {GREEN}{trunc(plan_s, w-12)}{DIM}{prio_s}{RESET}"
 
-        out += move(8); out += clr()
-        out += f"{DIM}  📖  epi×{self._epi_count}  sem×{self._sem_count}  "
-        if self._dmn:
-            out += f"dmn: {trunc(self._dmn, w-30)}"
-        out += RESET
+        # Row 8 — default mode / dream / dissonance
+        out += mv(8); out += clr()
+        dmn_s   = trunc(self._dmn, 45) if self._dmn else "idle"
+        parts   = [f"dmn:{BLUE}{dmn_s}{RESET}"]
+        if self._dream_tone:   parts.append(f"{DIM}dream:{self._dream_tone}{RESET}")
+        if self._imagination:  parts.append(f"{DIM}novelty:{self._imagination:.2f}{RESET}")
+        if self._dissonance:   parts.append(f"{DIM}dissonance:{self._dissonance:.2f}{RESET}")
+        if self._insights:     parts.append(f"{DIM}insights:{self._insights}{RESET}")
+        out += f"{DIM} 🌙 {RESET}" + "  ".join(parts)
 
-        # NEW: memory status line
-        out += move(9); out += clr()
-        out += f"{DIM}  🧩  memory: {mem_color}{self._mem_status}{RESET}"
+        # Row 9 — node layer activity
+        out += mv(9); out += clr()
+        row9 = f" 📊 "
+        for label, nodes in layers:
+            total = len(nodes)
+            fired = sum(1 for n in nodes if self._fired.get(n,0) > 0)
+            calls = sum(self._fired.get(n,0) for n in nodes)
+            color = GREEN if fired==total else (YELLOW if fired>0 else RED)
+            row9 += f"{DIM}{label}:{color}{fired}/{total}{DIM}×{calls}  {RESET}"
+        out += row9
 
-        out += move(10); out += clr()
-        out += f"{DIM}{'─' * w}{RESET}"
+        # Row 10 — separator
+        out += mv(10); out += clr()
+        out += f"{DIM}{'─'*w}{RESET}"
 
-        out += restore()
+        out += res()
         print(out, end="", flush=True)
 
-    # ── Chat print ────────────────────────────────────────────────────────────
+    # ── Chat — only You and GRACE ────────────────────────────────────────────
 
-    def _chat_print(self, text):
+    def _chat(self, text):
         with self._lock:
             print(text, flush=True)
 
-    # ── Send — engages every brain region ────────────────────────────────────
+    # ── Send ──────────────────────────────────────────────────────────────────
 
     def send(self, text: str):
-        # 1. Audio — triggers conversation node
         a = String(); a.data = text
         self._pub_audio.publish(a)
 
-        # 2. Sensor bundle — triggers entire unconscious + subconscious pipeline
         bundle = {
             "camera_description": "person talking to GRACE, making eye contact",
             "audio_text":         text,
@@ -375,56 +610,20 @@ class GraceChat(Node):
         b = String(); b.data = json.dumps(bundle)
         self._pub_bundle.publish(b)
 
-        # 3. Working memory — triggers episodic + semantic recall
         wm = {
-            "timestamp":      time.time(),
+            "timestamp":    time.time(),
             "active_thought": text,
-            "phonological":   [text[:80]],
-            "visuospatial":   [],
+            "phonological": [text[:80]],
+            "visuospatial": [],
         }
         w = String(); w.data = json.dumps(wm)
         self._pub_wm.publish(w)
 
+        with self._lock:
+            self._fired["sensor_hub"] += 1
+            self._salience = 0.0
+
         self._waiting = True
-
-    # ── Diagnostics ───────────────────────────────────────────────────────────
-
-    def dump_memories(self, db_path: str = "/home/grace/memory/episodic.json",
-                      n: int = 10):
-        """Print the most recent episodic memories directly from disk."""
-        try:
-            store = MemoryStore(db_path, max_entries=500)
-            entries = store.tail(n)
-            self._chat_print(
-                f"\n{CYAN}{BOLD}── Last {n} episodic memories ──{RESET}")
-            for i, e in enumerate(entries, 1):
-                content = e.get("content", str(e))[:120]
-                ts = e.get("timestamp", 0)
-                t_str = time.strftime("%m/%d %H:%M", time.localtime(ts)) if ts else "?"
-                self._chat_print(
-                    f"{DIM}  {i:2}. [{t_str}] {CYAN}{content}{RESET}")
-            if not entries:
-                self._chat_print(f"{YELLOW}  No episodic memories found.{RESET}")
-            self._chat_print("")
-        except Exception as e:
-            self._chat_print(f"{RED}  Error reading memories: {e}{RESET}")
-
-    def recall_test(self, query: str,
-                    db_path: str = "/home/grace/memory/episodic.json"):
-        """Test memory recall for a query directly (bypasses LLM)."""
-        try:
-            store = MemoryStore(db_path, max_entries=500)
-            hits = store.search(query, top_k=5)
-            self._chat_print(
-                f"\n{CYAN}{BOLD}── Recall test: '{query}' ──{RESET}")
-            for i, hit in enumerate(hits, 1):
-                content = hit.get("content", str(hit))[:120]
-                self._chat_print(f"{DIM}  {i}. {CYAN}{content}{RESET}")
-            if not hits:
-                self._chat_print(f"{YELLOW}  No matches found.{RESET}")
-            self._chat_print("")
-        except Exception as e:
-            self._chat_print(f"{RED}  Error: {e}{RESET}")
 
 
 def spin_thread(node):
@@ -438,95 +637,94 @@ def main():
     t = threading.Thread(target=spin_thread, args=(node,), daemon=True)
     t.start()
 
-    rows = shutil.get_terminal_size((100, 30)).lines
+    rows = shutil.get_terminal_size((110, 30)).lines
 
-    print(hide_cur(), end="")
-    print(cls(), end="")
-    print(scroll(PANEL + 1, rows), end="", flush=True)
-    print(move(PANEL + 1), end="", flush=True)
+    print(hcur(), end="")
+    print(cls(),  end="")
+    print(scrl(PANEL+1, rows), end="", flush=True)
+    print(mv(PANEL+1), end="", flush=True)
 
     node._redraw()
-
-    print(f"{DIM}  Connecting to GRACE...{RESET}", flush=True)
+    print(f"{DIM}  Connecting...{RESET}", flush=True)
     time.sleep(1.5)
     node._redraw()
 
     try:
         while True:
-            print(show_cur(), end="", flush=True)
+            print(scur(), end="", flush=True)
             emotion = node._emotion
-            prompt  = f"{CYAN}{BOLD}You [{emotion}]:{RESET} "
-            print(prompt, end="", flush=True)
+            blocked = node._blocked
+            color   = RED if blocked else CYAN
+            print(f"{color}{BOLD}You [{emotion}]:{RESET} ", end="", flush=True)
 
             try:
                 user_input = input("").strip()
             except EOFError:
                 break
 
-            print(hide_cur(), end="", flush=True)
+            print(hcur(), end="", flush=True)
 
             if not user_input:
                 continue
-            if user_input.lower() in ("quit", "exit", "bye"):
-                node._chat_print(f"\n{GREEN}GRACE: Goodbye.{RESET}\n")
+            if user_input.lower() in ("quit","exit","bye"):
+                node._chat(f"\n{GREEN}GRACE: Goodbye.{RESET}\n")
                 break
 
-            # ── Special commands ──────────────────────────────────────────────
+            # ── Commands (shown inline, don't pollute chat) ───────────────────
             if user_input.lower() == "/dream":
                 d = String(); d.data = "{}"
                 node._pub_dream.publish(d)
-                node._chat_print(f"{DIM}  🌙  Dream cycle triggered...{RESET}")
-                continue
-
-            if user_input.lower() == "/status":
-                node._chat_print(
-                    f"{DIM}  Brain: emotion={node._emotion} "
-                    f"arousal={node._arousal:.2f} "
-                    f"salience={node._salience:.2f} "
-                    f"epi_recalls={node._epi_count} "
-                    f"sem_recalls={node._sem_count}{RESET}")
+                node._chat(f"{DIM}  🌙 Dream triggered{RESET}")
                 continue
 
             if user_input.lower() == "/memory":
-                node.dump_memories()
+                node._chat(
+                    f"\n{CYAN}{BOLD}Memory snapshot:{RESET}\n"
+                    f"  {DIM}Episodic (×{node._epi_count}): {node._epi_recalled or '—'}{RESET}\n"
+                    f"  {DIM}Semantic (×{node._sem_count}): {node._sem_recalled or '—'}{RESET}\n"
+                    f"  {DIM}Social: {node._social or '—'}{RESET}\n"
+                    f"  {DIM}Identity: {node._identity or '—'}{RESET}\n")
                 continue
 
-            if user_input.lower().startswith("/recall "):
-                query = user_input[8:].strip()
-                node.recall_test(query)
+            if user_input.lower() == "/nodes":
+                lines = [f"\n{CYAN}{BOLD}Node activity:{RESET}"]
+                for name, count in sorted(node._fired.items(),
+                                          key=lambda x: x[1], reverse=True):
+                    c = GREEN if count > 0 else RED
+                    lines.append(
+                        f"  {c}{'●' if count>0 else '○'}{RESET} "
+                        f"{DIM}{name:<30}×{count}{RESET}")
+                lines.append("")
+                node._chat("\n".join(lines))
                 continue
 
             if user_input.lower() == "/help":
-                node._chat_print(
-                    f"{CYAN}  Commands:{RESET}\n"
-                    f"  /dream        — trigger a dream cycle\n"
-                    f"  /memory       — dump last 10 episodic memories\n"
-                    f"  /recall <q>   — test memory search for query\n"
-                    f"  /status       — show brain state\n"
-                    f"  quit / exit   — leave\n")
+                node._chat(
+                    f"\n{CYAN}{BOLD}Commands:{RESET}\n"
+                    f"  {BOLD}/dream{RESET}   trigger dream cycle\n"
+                    f"  {BOLD}/memory{RESET}  show memory recalls\n"
+                    f"  {BOLD}/nodes{RESET}   show all 35 node counts\n"
+                    f"  {BOLD}/help{RESET}    this list\n"
+                    f"  {BOLD}quit{RESET}     exit\n")
                 continue
 
-            # Echo input
-            node._chat_print(
-                f"{CYAN}You [{emotion}]:{RESET} {user_input}")
-
+            # ── Normal conversation — only You/GRACE in chat ──────────────────
+            node._chat(f"{CYAN}You [{emotion}]:{RESET} {user_input}")
             node.send(user_input)
 
-            # Wait for speech response — 30s timeout (slow LLMs need this)
-            deadline = time.time() + 30.0
+            deadline = time.time() + 20.0
             while node._waiting and time.time() < deadline:
                 time.sleep(0.1)
 
             if node._waiting:
-                node._chat_print(
-                    f"{YELLOW}  (GRACE is still processing...){RESET}")
+                node._chat(f"{YELLOW}  (still thinking...){RESET}")
                 node._waiting = False
 
     except KeyboardInterrupt:
         pass
 
-    print(show_cur(), end="")
-    print(scroll(1, rows), end="")
+    print(scur(), end="")
+    print(scrl(1, rows), end="")
     print(cls(), end="", flush=True)
 
     node.destroy_node()
