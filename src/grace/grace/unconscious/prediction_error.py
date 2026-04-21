@@ -6,7 +6,7 @@ import json
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.schemas import PredictionError, to_json
+from grace.grace.utils.schemas import PredictionError, to_json
 
 RELEVANCE_THRESHOLD = 0.25   # errors below this are discarded
 
@@ -37,7 +37,7 @@ class PredictionErrorNode(Node):
             self._pub_thal.publish(out)
 
         # Always update affective state (even small errors shift mood slightly)
-        from grace.utils.schemas import AffectiveState
+        from grace.grace.utils.schemas import AffectiveState
         import time
         arousal = min(1.0, weighted * 1.5)
         affect = AffectiveState(

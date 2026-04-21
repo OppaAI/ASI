@@ -7,7 +7,7 @@ Implements late ignition: only content above the ignition threshold fires.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.schemas import GlobalWorkspaceContent, to_json
+from grace.grace.utils.schemas import GlobalWorkspaceContent, to_json
 
 IGNITION_THRESHOLD = 0.3    # min salience to broadcast
 BROADCAST_HZ       = 2.0

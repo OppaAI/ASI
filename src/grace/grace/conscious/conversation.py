@@ -5,8 +5,8 @@ Conversational interface node — with persistent memory across sessions.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.ollama_client import OllamaClient
-from grace.utils.memory_store import MemoryStore
+from grace.grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.memory_store import MemoryStore
 
 SYSTEM_PROMPT = """You are GRACE — a girl. Just a girl.
 

@@ -11,7 +11,7 @@ import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from grace.utils.schemas import ConsolidationPacket, to_json
+from grace.grace.utils.schemas import ConsolidationPacket, to_json
 
 
 class ConsolidationNode(Node):

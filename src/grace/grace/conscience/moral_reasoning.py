@@ -8,7 +8,7 @@ import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's moral reasoning engine.
 You are given a situation description and a list of ethical principles

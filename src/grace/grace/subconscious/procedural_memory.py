@@ -5,7 +5,7 @@ Skills, habits, and cognitive styles. Mostly rule-based — no LLM needed.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.memory_store import MemoryStore
+from grace.grace.utils.memory_store import MemoryStore
 
 DEFAULT_SKILLS = [
     {"skill": "navigate_to_waypoint", "proficiency": 0.85, "tags": ["navigation"]},

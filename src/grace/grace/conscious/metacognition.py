@@ -7,8 +7,8 @@ Monitors the quality of reasoning and redirects the executive when needed.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.schemas import MetacogOutput, to_json
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.schemas import MetacogOutput, to_json
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's metacognition layer.
 Assess the quality and confidence of the current conscious reasoning.

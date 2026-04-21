@@ -7,7 +7,7 @@ Feeds imagination and reflection subsystems.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's default mode network — the mind-wandering voice.
 When GRACE is idle or between tasks, you generate spontaneous thoughts,
@@ -106,7 +106,7 @@ class DefaultModeNode(Node):
         self._pub_dmn.publish(d_out)
 
         # Also push low-salience content into the Global Workspace
-        from grace.utils.schemas import GlobalWorkspaceContent, to_json
+        from grace.grace.utils.schemas import GlobalWorkspaceContent, to_json
         gw = GlobalWorkspaceContent(
             broadcast=parsed.get("narrative_simulation", "")[:150],
             sources=["default_mode"],

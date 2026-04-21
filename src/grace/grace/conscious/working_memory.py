@@ -5,7 +5,7 @@ Phonological loop + visuospatial sketchpad + active thought buffer.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.schemas import to_json
+from grace.grace.utils.schemas import to_json
 from collections import deque
 
 BUFFER_SIZE = 7   # Miller's law

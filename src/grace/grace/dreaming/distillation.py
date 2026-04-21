@@ -8,8 +8,8 @@ import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from grace.utils.schemas import ConsolidationPacket, to_json
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.schemas import ConsolidationPacket, to_json
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's distillation engine — the insight extractor.
 Given imagination output (counterfactuals, hypotheses, alternatives),

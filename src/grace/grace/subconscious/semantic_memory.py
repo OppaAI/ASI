@@ -6,8 +6,8 @@ import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from grace.utils.memory_store import MemoryStore
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.memory_store import MemoryStore
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's semantic memory system.
 Given a query and a knowledge base, return the 3 most relevant facts

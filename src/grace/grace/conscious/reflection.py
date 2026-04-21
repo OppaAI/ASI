@@ -8,8 +8,8 @@ import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from grace.utils.schemas import ReflectionOutput, to_json
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.schemas import ReflectionOutput, to_json
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's inner monologue and symbolic reasoning voice.
 You reflect on the current conscious content and produce structured self-talk.

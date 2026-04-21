@@ -9,7 +9,7 @@ import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's imagination and counterfactual simulator.
 Given a dream narrative and recent environment context, generate creative

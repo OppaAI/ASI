@@ -5,7 +5,7 @@ Computes a relevance score for current content and gates GW access.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.schemas import RelevanceScore, GlobalWorkspaceContent, to_json
+from grace.grace.utils.schemas import RelevanceScore, GlobalWorkspaceContent, to_json
 
 GW_RELEVANCE_THRESHOLD = 0.5
 

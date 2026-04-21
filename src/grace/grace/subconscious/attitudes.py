@@ -5,7 +5,7 @@ Evaluative dispositions and cognitive dissonance resolution.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.schemas import AttitudeState, to_json
+from grace.grace.utils.schemas import AttitudeState, to_json
 
 DEFAULT_ATTITUDES = {
     "wildlife":       0.95,

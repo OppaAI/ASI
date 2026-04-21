@@ -18,7 +18,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan, Imu
 
-from grace.utils.schemas import SensorBundle, to_json
+from grace.grace.utils.schemas import SensorBundle, to_json
 
 
 SENSOR_QOS = QoSProfile(

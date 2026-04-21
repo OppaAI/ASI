@@ -9,8 +9,8 @@ import json, time, math, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from grace.utils.schemas import QualiaField, to_json
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.schemas import QualiaField, to_json
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's phenomenal consciousness layer.
 Given the current global workspace broadcast and affective state,

@@ -6,7 +6,7 @@ import json
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.schemas import to_json
+from grace.grace.utils.schemas import to_json
 
 GW_THRESHOLD = 0.35
 
@@ -26,7 +26,7 @@ class ThalamicGateNode(Node):
             return
         if d.get("error_magnitude", 0.0) * d.get("precision_weight", 1.0) >= GW_THRESHOLD:
             # Wrap as Global Workspace content
-            from grace.utils.schemas import GlobalWorkspaceContent
+            from grace.grace.utils.schemas import GlobalWorkspaceContent
             gw = GlobalWorkspaceContent(
                 broadcast=f"Thalamic gate promoted: {d.get('source','?')} error={d.get('error_magnitude',0):.2f}",
                 sources=["thalamic_gate"],

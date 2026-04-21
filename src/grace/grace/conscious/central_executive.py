@@ -10,8 +10,8 @@ from rclpy.node import Node
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped
 
-from grace.utils.schemas import ExecutivePlan, to_json
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.schemas import ExecutivePlan, to_json
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's central executive — the planner and goal manager.
 Given the current global workspace, metacognition assessment, values, and

@@ -6,8 +6,8 @@ Persists to disk and updates slowly via consolidation.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.schemas import to_json
-from grace.utils.memory_store import MemoryStore
+from grace.grace.utils.schemas import to_json
+from grace.grace.utils.memory_store import MemoryStore
 
 DEFAULT_TRAITS = {
     "openness":          0.85,

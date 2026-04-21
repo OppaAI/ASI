@@ -8,9 +8,9 @@ import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from grace.utils.schemas import MemoryEntry, to_json
-from grace.utils.memory_store import MemoryStore
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.schemas import MemoryEntry, to_json
+from grace.grace.utils.memory_store import MemoryStore
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's episodic memory system.
 Given a query and a list of memory entries, return the 3 most relevant memories

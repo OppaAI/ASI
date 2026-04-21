@@ -9,8 +9,8 @@ import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool
 
-from grace.utils.memory_store import MemoryStore
-from grace.utils.ollama_client import OllamaClient
+from grace.grace.utils.memory_store import MemoryStore
+from grace.grace.utils.ollama_client import OllamaClient
 
 SYSTEM_PROMPT = """You are GRACE's dreaming process — offline emotional replay.
 Given a set of recent memories across different types, generate a dream sequence:

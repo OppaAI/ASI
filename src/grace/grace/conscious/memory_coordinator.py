@@ -7,7 +7,7 @@ Global Workspace.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.schemas import GlobalWorkspaceContent, to_json
+from grace.grace.utils.schemas import GlobalWorkspaceContent, to_json
 
 
 class MemoryCoordinatorNode(Node):

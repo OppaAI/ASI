@@ -6,7 +6,7 @@ Persists to disk and receives updates from Conscience and Consolidation.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.utils.memory_store import MemoryStore
+from grace.grace.utils.memory_store import MemoryStore
 
 DEFAULT_VALUES = {
     "care_for_life":       1.0,
