@@ -14,9 +14,20 @@ import time
 import shutil
 import sys
 
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import String
+try:
+    import rclpy
+    from rclpy.node import Node
+    from std_msgs.msg import String
+except ImportError:
+    print(
+        "ERROR: ROS2 Python packages are not available.\n"
+        "test_grace_brain.py requires ROS2 Humble (rclpy + std_msgs).\n\n"
+        "Try:\n"
+        "  source /opt/ros/humble/setup.bash\n"
+        "  source ~/ros2_ws/install/setup.bash\n"
+        "  python3 test_grace_brain.py\n"
+    )
+    sys.exit(1)
 
 # ── ANSI ──────────────────────────────────────────────────────────────────────
 CYAN    = "\033[96m"
