@@ -132,6 +132,132 @@ class AttitudeState:
     dissonance_level: float = 0.0
 
 
+# ── Expanded Subconscious Layer ───────────────────────────────────────────────
+
+@dataclass
+class FutureSelfState:
+    timestamp: float = field(default_factory=now)
+    prospective_memory_count: int = 0        # Number of active prospective memories
+    anticipatory_emotion: float = 0.0        # -1=negative  0=neutral  1=positive
+    optimism_bias: float = 0.6               # Tendency to overestimate positive outcomes
+    pessimism_bias: float = 0.3              # Tendency to underestimate negative outcomes
+    upcoming_events: list = field(default_factory=list)  # Near-future events
+    simulation_horizon: float = 86400.0      # Seconds ahead we simulate (default 1 day)
+
+
+@dataclass
+class SocialMirrorState:
+    timestamp: float = field(default_factory=now)
+    looking_glass_self: float = 0.5          # 0=others see us negatively  1=positively
+    actual_social_feedback: float = 0.5      # 0=negative feedback  1=positive feedback
+    self_esteem: float = 0.5                 # 0=low self-esteem  1=high self-esteem
+    sociometer_reading: float = 0.5          # 0=excluded  0.5=neutral  1=included
+    identity_coherence: float = 0.7          # 0=incoherent  1=coherent identity
+    self_verification_motive: float = 0.6    # 0=no motive  1=strong drive to verify self-views
+    congruence: float = 0.0                  # 0=no match  1=perfect match between LGS and actual feedback
+
+
+@dataclass
+class TheoryOfMindState:
+    timestamp: float = field(default_factory=now)
+    tom_level: int = 0                       # 0=none, 1=first order, 2=second order, etc.
+    tom_accuracy: float = 0.6                # 0=no accuracy  1=perfect accuracy
+    cognitive_load: float = 0.0              # 0=load  1=maximum load
+    social_relevance: float = 0.0            # 0=not relevant  1=highly relevant
+    cognitive_resources: float = 0.5         # 0=no resources  1=full resources
+    executive_endorsement: float = 0.0       # 0=no endorsement  1=full endorsement
+    available_resources: float = 0.5         # 0=no resources  1=full resources
+
+
+@dataclass
+class CounterfactualEmotionState:
+    timestamp: float = field(default_factory=now)
+    regret: float = 0.2                      # 0=no regret  1=intense regret
+    relief: float = 0.3                      # 0=no relief  1=intense relief
+    envy: float = 0.1                        # 0=no envy  1=intense envy
+    gratitude: float = 0.4                   # 0=no gratitude  1=intense gratitude
+    emotional_valence: float = 0.0           # -1=negative  0=neutral  1=positive
+    complexity_score: float = 0.0            # 0=simple  1=complex emotional mix
+
+
+# ── Affective Working Memory ─────────────────────────────────────────────────────
+
+@dataclass
+class AffectiveWorkingMemoryState:
+    timestamp: float = field(default_factory=now)
+    current_mood: float = 0.5                # -1=negative  0=neutral  1=positive
+    mood_stability: float = 0.7              # 0=unstable  1=stable
+    emotional_inertia: float = 0.3           # 0=fluid  1=rigid (resistance to change)
+    mood_congruent_bias: float = 0.2         # Tendency to recall mood-congruent memories
+    affective_capacity: float = 0.6          # Current affective processing load (0-1)
+    dominant_emotion: str = "neutral"        # Currently dominant emotion label
+    emotion_variability: float = 0.4         # 0=stable  1=highly variable
+    stress_buffer: float = 0.5               # 0=no buffer  1=high buffering capacity
+
+
+# ── Curiosity Gradient ────────────────────────────────────────────────────────
+
+@dataclass
+class CuriosityGradientState:
+    timestamp: float = field(default_factory=now)
+    information_gap: float = 0.5             # 0=no gap  1=maximum information gap
+    curiosity_intensity: float = 0.6         # 0=no curiosity  1=burning curiosity
+    novelty_sensitivity: float = 0.5         # 0=insensitive  1=highly sensitive to novelty
+    knowledge_confidence: float = 0.7        # 0=no confidence  1=complete confidence in knowledge
+    exploration_drive: float = 0.4           # 0=no drive  1=strong drive to explore
+    information_novelty: float = 0.3         # 0=familiar  1=completely novel
+    learning_progress: float = 0.5           # 0=no progress  1=rapid learning
+    boredom_threshold: float = 0.6           # Threshold below which boredom occurs
+
+
+# ── Social Comparison Engine ────────────────────────────────────────────────
+
+@dataclass
+class SocialComparisonState:
+    timestamp: float = field(default_factory=now)
+    comparison_direction: float = 0.0        # -1=worse than others  0=same  1=better than others
+    comparison_importance: float = 0.5       # 0=not important  1=extremely important
+    social_ranking: float = 0.5              # 0=lowest rank  1=highest rank in group
+    envy_level: float = 0.1                  # 0=no envy  1=intense envy
+    pride_level: float = 0.6                 # 0=no pride  1=excessive pride
+    schadenfreude: float = 0.05              # 0=no schadenfreude  1=high schadenfreude
+    competitiveness: float = 0.4             # 0=non-competitive  1=highly competitive
+    conformity_pressure: float = 0.3         # 0=no pressure  1=high pressure to conform
+    authenticity: float = 0.7                # 0=inauthentic  1=completely authentic
+
+
+# ── Moral Disgust Memory ────────────────────────────────────────────────
+
+@dataclass
+class MoralDisgustMemoryState:
+    timestamp: float = field(default_factory=now)
+    contamination_sensitivity: float = 0.5   # 0=low sensitivity  1=high sensitivity to moral contamination
+    contamination_history: float = 0.3       # 0=no history  1=extensive contamination history
+    purification_motivation: float = 0.4     # 0=no motivation  1=strong motivation to purify
+    moral_purity_ideal: float = 0.7          # 0=low standards  1=high moral purity standards
+    contamination_avoidance: float = 0.6     # 0=no avoidance  1=strong avoidance of contaminants
+    guilt_response: float = 0.2              # 0=no guilt  1=strong guilt response
+    shame_response: float = 0.3              # 0=no shame  1=strong shame response
+    restitution_drive: float = 0.5           # 0=no restitution  1=strong drive to make restitution
+    forgiveness_capacity: float = 0.6        # 0=no forgiveness  1=high capacity for forgiveness
+
+
+# ── Aesthetic Sensitivity System ────────────────────────────────────────
+
+@dataclass
+class AestheticSensitivityState:
+    timestamp: float = field(default_factory=now)
+    beauty_sensitivity: float = 0.6          # 0=insensitive  1=highly sensitive to beauty
+    harmony_appreciation: float = 0.5        # 0=no appreciation  1=deep appreciation of harmony
+    sublime_responsiveness: float = 0.3      # 0=unresponsive  1=highly responsive to sublime
+    aesthetic_judgment_confidence: float = 0.4 # 0=no confidence  1=high confidence in aesthetic judgments
+    novelty_seeking: float = 0.5             # 0=traditional  1=seeks novel aesthetic experiences
+    emotional_resonance: float = 0.5         # 0=no resonance  1=deep emotional resonance with art
+    cultural_openness: float = 0.5           # 0=ethnocentric  1=open to diverse aesthetic traditions
+    aesthetic_memory: float = 0.4            # 0=poor recall  1=rich aesthetic memory
+    creative_inspiration: float = 0.5        # 0=inspired  1=highly inspired by aesthetic experiences
+
+
 # ── Conscience module ─────────────────────────────────────────────────────────
 
 @dataclass
