@@ -72,6 +72,40 @@ class RelevanceScore:
     motive: str = ""
 
 
+# ── Enhanced Unconscious Layer ────────────────────────────────────────────────
+
+@dataclass
+class EmotionRegulationState:
+    timestamp: float = field(default_factory=now)
+    suppression: float = 0.2       # 0=none  1=exclusive use (expressive suppression)
+    reappraisal: float = 0.5       # 0=none  1=exclusive use (cognitive reappraisal)
+    rumination: float = 0.1        # 0=none  1=exclusive use (passive repetitive focus)
+    acceptance: float = 0.2        # 0=none  1=exclusive use (acceptance/mindfulness)
+    net_emotional_impact: float = 0.0  # Negative=harmful, Positive=beneficial
+    strategy_entropy: float = 0.0  # Diversity of strategy use (higher=more adaptive)
+
+
+@dataclass
+class DisgustState:
+    timestamp: float = field(default_factory=now)
+    core_disgust: float = 0.2      # 0=none  1=high (bodily contaminants)
+    animal_reminder_disgust: float = 0.1  # 0=none  1=high (animal nature reminders)
+    moral_disgust: float = 0.3     # 0=none  1=high (moral violations)
+    purity_concern: float = 0.4    # 0=none  1=high (purity/sanctity concerns)
+    contamination_sensitivity: float = 0.5  # 0=low  1=high sensitivity
+    overall_disgust: float = 0.0   # Combined disgust level (0-1)
+
+
+@dataclass
+class ConfabulationState:
+    timestamp: float = field(default_factory=now)
+    narrative: str = ""            # Generated narrative/explanation
+    confidence: float = 0.5        # 0=no confidence  1=high confidence
+    gap_severity_prior: float = 0.0  # Severity of gap that triggered confabulation
+    is_confabulation: bool = False # True if this is a confabulated narrative
+    sources_used: list = field(default_factory=list)  # Recent gap sources used
+
+
 # ── Subconscious layer ────────────────────────────────────────────────────────
 
 @dataclass

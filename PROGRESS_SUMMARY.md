@@ -34,7 +34,7 @@ Successfully implemented all foundational biological regulation components:
 - **Outputs**: Attention, creativity, energy levels over time
 - **Status**: ✅ Working
 
-### 6. Homeostatic Set Points Node (`grace.grace.grace.vital_core.homeostatic_setpoints`)
+### 6. Homeostatic Set Points Node (`grace.grace.vital_core.homeostatic_setpoints`)
 - **Purpose**: Individual baseline traits (arousal preference, mood baseline, etc.)
 - **Inputs**: Chronic load, positive experiences, social acceptance, mastery
 - **Outputs**: Stable trait-like set points that plastically adapt
@@ -50,6 +50,28 @@ Successfully implemented all foundational biological regulation components:
 - **Purpose**: Tracks relational threat and social pain accumulation
 - **Inputs**: Rejection, betrayal, isolation, positive bonding, evaluation anxiety
 - **Outputs**: Threat budget levels and healing rates
+- **Status**: ✅ Working
+
+## ✅ Phase 2 Complete: Enhanced Unconscious Layer (3/3)
+
+Successfully implemented all enhanced unconscious processing components:
+
+### 1. Emotion Regulation Node (`grace.grace.unconscious.emotion_regulation`)
+- **Purpose**: Models emotion regulation strategies (suppression, reappraisal, rumination, acceptance)
+- **Inputs**: Affective state, pain signals, threat budget, metabolic state, executive control
+- **Outputs**: Emotion regulation state with net emotional impact
+- **Status**: ✅ Working
+
+### 2. Disgust & Purity System Node (`grace.grace.unconscious.disgust_purity`)
+- **Purpose**: Models disgust responses to contaminants, moral violations, and purity concerns
+- **Inputs**: Sensor bundle, affective state, moral verdicts, social norms, pain signals
+- **Outputs**: Disgust state with core, animal-reminder, moral, and purity components
+- **Status**: ✅ Working
+
+### 3. Confabulation Engine Node (`grace.grace.unconscious.confabulation_engine`)
+- **Purpose**: Generates post-hoc narratives to fill explanatory gaps with cognitive biases
+- **Inputs**: Memory access, prediction errors, agency violations, incoherent broadcasts, metacognitive uncertainty
+- **Outputs**: Confabulation state with narrative, confidence, and source transparency
 - **Status**: ✅ Working
 
 ## 🔧 Technical Implementation Details
@@ -85,7 +107,7 @@ These will build upon the vital core foundation to create a more sophisticated u
 
 ## 🏗️ Architecture Progress
 ```
-Vital Core (8/8) → Unconscious (3/11) → Subconscious (9/18) → Conscience (4/10) → 
+Vital Core (8/8) → Unconscious (6/11) → Subconscious (9/18) → Conscience (4/10) → 
 Hidden Workspace (10/10) → Qualia (6/10) → Conscious (3/9) → Dreaming (1/1)
 ```
 
