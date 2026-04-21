@@ -1,3 +1,4 @@
+```mermaid
 flowchart TD
     classDef slm fill:#FF4500,stroke:#ffffff,stroke-width:3px,color:#ffffff,font-weight:bold
 
@@ -318,3 +319,5 @@ flowchart TD
     classDef slm fill:#FF4500,stroke:#ffffff,stroke-width:3px,color:#ffffff,font-weight:bold
 
     class AC,EMREG,DISGUST,CONFAB,SOC,FUTSELF,TOMLEVELS,COUNTERFACT,AFFWM,CURIOSGRAD,SOCCOMP,AESTHET,REF,JUDGE,MORALREAS,QUALIA,HOT,BODYQ,SELFQ,AWEQ,FLOWQ,REF2,META,EXEC,MENTALIZ,IMAG slm
+
+```
