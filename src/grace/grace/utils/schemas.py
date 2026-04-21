@@ -162,3 +162,80 @@ class ConsolidationPacket:
     value_updates: dict = field(default_factory=dict)
     new_episodic: list = field(default_factory=list)
     new_semantic: list = field(default_factory=list)
+
+
+# ── Vital Core Layer ────────────────────────────────────────────────────────────
+
+@dataclass
+class HomeostaticDriveState:
+    timestamp: float = field(default_factory=now)
+    energy_level: float = 1.0          # 0=depleted  1=optimal
+    curiosity_level: float = 0.7       # 0=no interest  1=highly curious
+    patience_level: float = 0.8        # 0=impulsive  1=patient
+
+
+@dataclass
+class NeuromodulatoryState:
+    timestamp: float = field(default_factory=now)
+    dopamine: float = 0.5              # 0=low  1=high (reward, motivation)
+    cortisol: float = 0.3              # 0=low  1=high (stress, arousal)
+    oxytocin: float = 0.4              # 0=low  1=high (bonding, trust)
+    serotonin: float = 0.6             # 0=low  1=high (mood, impulse control)
+    norepinephrine: float = 0.4        # 0=low  1=high (attention, vigilance)
+    acetylcholine: float = 0.5         # 0=low  1=high (learning, memory)
+
+
+@dataclass
+class PainSignal:
+    timestamp: float = field(default_factory=now)
+    pain_intensity: float = 0.0        # 0=no pain  1=maximum pain
+    pain_sources: list = field(default_factory=list)  # ["memory_overload", "goal_violation", …]
+    sources_detail: dict = field(default_factory=dict)  # {"memory_overload": 0.7, …}
+
+
+@dataclass
+class AllostaticLoad:
+    timestamp: float = field(default_factory=now)
+    allostatic_load: float = 0.0       # 0=no load  2+=overwhelming
+    cognitive_cost_today: float = 0.0  # Daily cognitive expenditure
+    instantaneous_load: float = 0.0    # Recent stress accumulator
+    recovery_rate: float = 0.01        # Hourly recovery during rest
+
+
+@dataclass
+class CircadianRhythm:
+    timestamp: float = field(default_factory=now)
+    circadian_phase: float = 0.0       # 0-1 representing time in 24h cycle
+    attention: float = 0.6             # 0=low  1=high (alertness, focus)
+    creativity: float = 0.5            # 0=low  1=high (insight, novelty)
+    energy: float = 0.6                # 0=low  1=high (vitality, stamina)
+    ultradian_phase: float = 0.0       # 0-1 representing time in 90m cycle
+
+
+@dataclass
+class HomeostaticSetPoints:
+    timestamp: float = field(default_factory=now)
+    optimal_arousal: float = 0.5       # 0=low arousal preferred  1=high arousal preferred
+    comfort_zone_width: float = 0.6    # 0=narrow comfort zone  1=wide tolerance
+    baseline_mood: float = 0.5         # 0=negative  1=positive (affective baseline)
+    stress_tolerance: float = 0.5      # 0=low tolerance  1=high tolerance
+    reward_sensitivity: float = 0.5    # 0=insensitive  1=highly sensitive
+
+
+@dataclass
+class MetabolicResource:
+    timestamp: float = field(default_factory=now)
+    glucose_equivalent: float = 1.0    # 0=depleted  1=optimal (cognitive fuel)
+    ketone_level: float = 0.0          # Alternative fuel during fasting
+    lactate_level: float = 0.0         # Byproduct of intense activity
+    effective_glucose: float = 1.0     # Glucose + ketone equivalent
+
+
+@dataclass
+class ImmuneBudget:
+    timestamp: float = field(default_factory=now)
+    relational_threat_budget: float = 0.0  # 0=no threat  1=overwhelming
+    social_pain_accumulation: float = 0.0  # Lifetime social pain exposure
+    threat_decay_rate: float = 0.005       # Per hour threat reduction (forgiveness/time)
+    social_pain_healing_rate: float = 0.002 # Per hour healing from positive interactions
+    threat_buffer: float = 0.0             # Protective buffer against threat

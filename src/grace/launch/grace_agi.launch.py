@@ -14,6 +14,7 @@ Override any parameter on the command line:
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -37,6 +38,8 @@ def generate_launch_description():
         declare("memory_root",   "/home/grace/memory", "Root path for memory files"),
         declare("scripture_path","/home/grace/config/scripture_principles.yaml",
                 "Scripture principles YAML"),
+        # Vital Core parameters
+        declare("vital_core_enabled", "true", "Enable Vital Core biological regulation"),
     ]
 
     # ── Convenience: build parameter dicts ───────────────────────────────────
@@ -59,8 +62,40 @@ def generate_launch_description():
         return Node(package=pkg, executable=exe, name=name,
                     output="screen", parameters=params)
 
+    def make_vital_node(pkg, exe, name):
+        """Create a vital core node (non-LLM, parameter-free)"""
+        return Node(package=pkg, executable=exe, name=name,
+                    output="screen")
+
     nodes = [
         LogInfo(msg="=== GRACE AGi pipeline starting ==="),
+
+        # ── Vital Core ────────────────────────────────────────────────────────
+        # Conditionally load vital core components
+        Node(package="grace", executable="drive",
+             name="grace_drive", output="screen",
+             condition=IfCondition(LaunchConfiguration("vital_core_enabled"))),
+        Node(package="grace", executable="neuromodulatory",
+             name="grace_neuromodulatory", output="screen",
+             condition=IfCondition(LaunchConfiguration("vital_core_enabled"))),
+        Node(package="grace", executable="pain_signal",
+             name="grace_pain_signal", output="screen",
+             condition=IfCondition(LaunchConfiguration("vital_core_enabled"))),
+        Node(package="grace", executable="allostatic_load",
+             name="grace_allostatic_load", output="screen",
+             condition=IfCondition(LaunchConfiguration("vital_core_enabled"))),
+        Node(package="grace", executable="circadian_rhythm",
+             name="grace_circadian_rhythm", output="screen",
+             condition=IfCondition(LaunchConfiguration("vital_core_enabled"))),
+        Node(package="grace", executable="homeostatic_setpoints",
+             name="grace_homeostatic_setpoints", output="screen",
+             condition=IfCondition(LaunchConfiguration("vital_core_enabled"))),
+        Node(package="grace", executable="metabolic_tracker",
+             name="grace_metabolic_tracker", output="screen",
+             condition=IfCondition(LaunchConfiguration("vital_core_enabled"))),
+        Node(package="grace", executable="immune_budget",
+             name="grace_immune_budget", output="screen",
+             condition=IfCondition(LaunchConfiguration("vital_core_enabled"))),
 
         # ── Sensors ──────────────────────────────────────────────────────────
         Node(package="grace", executable="sensor_hub",

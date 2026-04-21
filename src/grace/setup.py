@@ -70,6 +70,16 @@ setup(
             'imagination        = grace.dreaming.imagination:main',
             'distillation       = grace.dreaming.distillation:main',
             'consolidation      = grace.dreaming.consolidation:main',
+
+            # ── Vital Core ───────────────────────────────────────────
+            'drive              = grace.vital_core.drive:main',
+            'neuromodulatory    = grace.vital_core.neuromodulatory:main',
+            'pain_signal        = grace.vital_core.pain_signal:main',
+            'allostatic_load    = grace.vital_core.allostatic_load:main',
+            'circadian_rhythm   = grace.vital_core.circadian_rhythm:main',
+            'homeostatic_setpoints = grace.vital_core.homeostatic_setpoints:main',
+            'metabolic_tracker  = grace.vital_core.metabolic_tracker:main',
+            'immune_budget      = grace.vital_core.immune_budget:main',
         ],
     },
 )
