@@ -47,6 +47,17 @@ sudo apt install python3-colcon-common-extensions python3-pip
 pip3 install requests pyyaml numpy
 ```
 
+### Quick environment check (before running scripts)
+
+If you see errors like `ModuleNotFoundError: No module named 'rclpy'`, your
+ROS2 environment is not sourced in the current shell.
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/ros2_ws/install/setup.bash
+python3 -c "import rclpy; from std_msgs.msg import String; print('ROS2 Python OK')"
+```
+
 ### Ollama + Nemotron on Jetson
 
 ```bash

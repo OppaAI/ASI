@@ -17,9 +17,26 @@ Layout:
   Row 10  ──────────────────────────────────────────────────────────────
   Row 11+ [scrolling] only You and GRACE
 """
-import json, threading, time, shutil, rclpy
-from rclpy.node import Node
-from std_msgs.msg import String
+import json
+import shutil
+import sys
+import threading
+import time
+
+try:
+    import rclpy
+    from rclpy.node import Node
+    from std_msgs.msg import String
+except ImportError:
+    print(
+        "ERROR: ROS2 Python packages are not available.\n"
+        "talk_to_grace.py requires ROS2 Humble (rclpy + std_msgs).\n\n"
+        "Try:\n"
+        "  source /opt/ros/humble/setup.bash\n"
+        "  source ~/ros2_ws/install/setup.bash\n"
+        "  python3 talk_to_grace.py\n"
+    )
+    sys.exit(1)
 
 CYAN    = "\033[96m"
 GREEN   = "\033[92m"
