@@ -6,7 +6,7 @@ Conflict Signal: Memory Overload · Goal Violation
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import PainSignal, to_json
+from grace.utils.schemas import PainSignal, to_json
 
 
 class PainSignalNode(Node):

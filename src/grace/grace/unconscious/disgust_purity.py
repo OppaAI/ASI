@@ -4,9 +4,10 @@ Unconscious Layer — Disgust & Purity System
 Moral Contamination · Boundary Violation
 """
 import json, time, rclpy
+from math import exp
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import DisgustState, to_json
+from grace.utils.schemas import DisgustState, to_json
 
 
 class DisgustPurityNode(Node):
@@ -214,7 +215,3 @@ def main(args=None):
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
-
-
-# Import exp function
-from math import exp

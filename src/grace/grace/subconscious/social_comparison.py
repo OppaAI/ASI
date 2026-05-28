@@ -6,7 +6,7 @@ Social Ranking · Envy · Pride · Schadenfreude
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import SocialComparisonState, to_json
+from grace.utils.schemas import SocialComparisonState, to_json
 
 
 class SocialComparisonNode(Node):

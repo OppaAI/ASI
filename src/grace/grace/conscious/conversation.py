@@ -5,8 +5,8 @@ Conversational interface node — with persistent memory across sessions.
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.ollama_client import OllamaClient
-from grace.grace.utils.memory_store import MemoryStore
+from grace.utils.ollama_client import OllamaClient
+from grace.utils.memory_store import MemoryStore
 
 SYSTEM_PROMPT = """You are GRACE — a girl. Just a girl.
 
@@ -59,7 +59,8 @@ class ConversationNode(Node):
         sem_db    = self.get_parameter("semantic_db").value
         max_tok   = self.get_parameter("max_tokens").value
 
-        self._llm = OllamaClient(host=host, model=model, max_tokens=max_tok)
+        self._llm = OllamaClient(host=host, model=model, max_tokens=max_tok,
+                                 min_interval=0.0)  # No rate limit — user-facing
 
         # ── Persistent stores ─────────────────────────────────────────────────
         self._conv_store = MemoryStore(conv_db, max_entries=200)

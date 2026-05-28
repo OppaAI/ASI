@@ -23,6 +23,10 @@ grace:
     lidar_scan:           "/scan"
     audio_in:             "/grace/audio/in"
     imu:                  "/imu/data"
+    interoceptive:        "/grace/sensors/interoceptive"
+    proprioceptive:       "/grace/sensors/proprioceptive"
+    perceptual_fill:      "/grace/sensors/perceptual_fill"
+    temporal_calibration: "/grace/sensors/temporal_calibration"
 
     # Unconscious pipeline
     prediction_errors:    "/grace/unconscious/prediction_errors"
@@ -34,6 +38,16 @@ grace:
     personality_bias:     "/grace/unconscious/personality"
     value_weights:        "/grace/unconscious/values"
     precision_params:     "/grace/unconscious/precision"
+    emotion_regulation:   "/grace/unconscious/emotion_regulation"
+    disgust_state:        "/grace/unconscious/disgust_state"
+    confabulation_state:  "/grace/unconscious/confabulation_state"
+    cognitive_bias:       "/grace/unconscious/cognitive_bias"
+    trauma_state:         "/grace/unconscious/trauma_state"
+    lateral_inhibition:   "/grace/unconscious/lateral_inhibition"
+    temporal_binding:     "/grace/unconscious/temporal_binding"
+    surprise_state:       "/grace/unconscious/surprise_state"
+    semantic_satiation:   "/grace/unconscious/semantic_satiation"
+    mimicry_state:        "/grace/unconscious/mimicry_state"
 
     # Subconscious pipeline
     episodic_recall:      "/grace/subconscious/episodic"
@@ -41,14 +55,37 @@ grace:
     procedural_recall:    "/grace/subconscious/procedural"
     social_model:         "/grace/subconscious/social"
     attitude_state:       "/grace/subconscious/attitudes"
+    future_self:          "/grace/subconscious/future_self"
+    social_mirror:        "/grace/subconscious/social_mirror"
+    theory_of_mind:       "/grace/subconscious/theory_of_mind"
+    counterfactual_emotion: "/grace/subconscious/counterfactual_emotion"
+    affective_wm:         "/grace/subconscious/affective_wm"
+    curiosity_gradient:   "/grace/subconscious/curiosity_gradient"
+    social_comparison:    "/grace/subconscious/social_comparison"
+    moral_disgust_memory: "/grace/subconscious/moral_disgust_memory"
+    aesthetic_state:      "/grace/subconscious/aesthetic"
+    attachment_state:     "/grace/subconscious/attachment_state"
+    affective_forecast:   "/grace/subconscious/affective_forecast"
 
     # Conscience pipeline
     moral_knowledge_out:  "/grace/conscience/knowledge"
     moral_reasoning_out:  "/grace/conscience/reasoning"
     moral_verdict:        "/grace/conscience/verdict"
+    esv_knowledge_out:    "/grace/conscience/esv_knowledge"
+    virtue_state:         "/grace/conscience/virtue_state"
+    sin_state:            "/grace/conscience/sin_state"
+    redemption_state:     "/grace/conscience/redemption_state"
+    moral_conflict:       "/grace/conscience/moral_conflict"
 
     # Qualia pipeline
     qualia_field:         "/grace/qualia/field"
+    hot_out:              "/grace/qualia/hot"
+    bodily_qualia:        "/grace/qualia/bodily"
+    temporal_qualia:      "/grace/qualia/temporal"
+    self_subject_qualia:  "/grace/qualia/self_subject"
+    awe_out:              "/grace/qualia/awe"
+    flow_out:             "/grace/qualia/flow"
+    phenomenal_binding:   "/grace/qualia/phenomenal_binding"
 
     # Conscious pipeline
     working_memory_out:   "/grace/conscious/working_memory"
@@ -60,6 +97,9 @@ grace:
     salience_out:         "/grace/conscious/salience"
     dmn_out:              "/grace/conscious/dmn"
     narrative_self_out:   "/grace/conscious/narrative_self"
+    mentalization_out:    "/grace/conscious/mentalization"
+    volition_out:         "/grace/conscious/volition"
+    insight_out:          "/grace/conscious/insight"
 
     # Action outputs
     cmd_vel:              "/cmd_vel"
@@ -69,13 +109,29 @@ grace:
     # Dreaming / consolidation (triggered offline)
     consolidation_trigger: "/grace/dreaming/trigger"
     consolidation_out:     "/grace/dreaming/consolidation"
+    reconsolidation:       "/grace/dreaming/reconsolidation"
+    incubation:            "/grace/dreaming/incubation"
+    schema_state:          "/grace/dreaming/schema_state"
+    neuroplasticity:       "/grace/dreaming/neuroplasticity"
+
+    # Hidden Workspace pipeline
+    private_reflection:   "/grace/hidden/private_reflection"
+    ego_defense:          "/grace/hidden/ego_defense"
+    rumination:           "/grace/hidden/rumination"
+    predictive_self:      "/grace/hidden/predictive_self"
+    error_monitoring:     "/grace/hidden/error_monitoring"
+    narrative_coherence:  "/grace/hidden/narrative_coherence"
+    cognitive_dissonance: "/grace/hidden/cognitive_dissonance"
+    deictic_shift:        "/grace/hidden/deictic_shift"
+    active_suppression:   "/grace/hidden/active_suppression"
+    introspective_access: "/grace/hidden/introspective_access"
 
   # ── Timing (seconds) ─────────────────────────────────────────────────────────
   timing:
     sensor_hz:          20.0
-    unconscious_hz:     10.0
-    subconscious_hz:     5.0
-    conscious_hz:        2.0
+    unconscious_hz:      3.0
+    subconscious_hz:     2.0
+    conscious_hz:        1.0
     action_hz:           5.0
     dreaming_interval: 300.0   # run consolidation every 5 minutes of idle
 

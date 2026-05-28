@@ -6,7 +6,7 @@ Looking-Glass Self · Sociometer
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import SocialMirrorState, to_json
+from grace.utils.schemas import SocialMirrorState, to_json
 
 
 class SocialMirrorNode(Node):

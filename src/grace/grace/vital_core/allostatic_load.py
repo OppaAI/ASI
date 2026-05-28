@@ -6,7 +6,7 @@ Cumulative Stress · Cognitive Cost Tracking
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import AllostaticLoad, to_json
+from grace.utils.schemas import AllostaticLoad, to_json
 
 
 class AllostaticLoadNode(Node):
@@ -50,7 +50,7 @@ class AllostaticLoadNode(Node):
         self.create_timer(1.0 / self.update_hz, self._update_load)
         self.get_logger().info("Allostatic Load Budget ready.")
 
-    # ── Input Processing ─────────────────────────────────────────────────────
+    # ── Input Processing ────────────────────────────────────────────────
     def _on_pain(self, msg: String):
         try:
             data = json.loads(msg.data)
@@ -96,7 +96,7 @@ class AllostaticLoadNode(Node):
         except Exception as e:
             self.get_logger().warn(f"Failed to process emotional labor: {e}")
 
-    # ── Load Dynamics Update ────────────────────────────────────────────────
+    # ── Load Dynamics Update ─────────────────────────────────────────────
     def _update_load(self):
         now = time.time()
         dt = now - self._last_update
@@ -142,12 +142,10 @@ class AllostaticLoadNode(Node):
                 f"(daily cognitive cost: {self._cognitive_cost_today:.2f})"
             )
 
-    def __init__(self):
-        super().__init__("grace_allostatic_load")
-        # Initialize instantaneous load tracker
-        self._instantaneous_load = 0.0
-        # Call the original __init__ logic after adding this field
-        # ... rest of original init continues ...
 
-
-# Need to fix the __init__ method - let me rewrite it properly
+def main(args=None):
+    rclpy.init(args=args)
+    node = AllostaticLoadNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()

@@ -6,7 +6,7 @@ Recursive Modeling
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import TheoryOfMindState, to_json
+from grace.utils.schemas import TheoryOfMindState, to_json
 
 
 class TheoryOfMindNode(Node):
@@ -162,7 +162,7 @@ class TheoryOfMindNode(Node):
 
         # Apply biological and developmental limits
         max_effective_level = min(self._max_tom_level, self._developmental_asymptote)
-        target_tom_level = min(target_mom_level, max_effective_level)
+        target_tom_level = min(target_tom_level, max_effective_level)
 
         # Smooth transition toward target level (avoid sudden jumps)
         level_diff = target_tom_level - self._tom_level

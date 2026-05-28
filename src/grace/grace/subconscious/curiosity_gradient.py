@@ -6,7 +6,7 @@ Information Gap Detection · Novelty Detection · Exploration Drive
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import CuriosityGradientState, to_json
+from grace.utils.schemas import CuriosityGradientState, to_json
 
 
 class CuriosityGradientNode(Node):
@@ -256,9 +256,9 @@ class CuriosityGradientNode(Node):
                 f"Explore:{self._exploration_drive:.2f}"
             )
 
-    def main(args=None):
-        rclpy.init(args=args)
-        node = CuriosityGradientNode()
-        rclpy.spin(node)
-        node.destroy_node()
-        rclpy.shutdown()
+def main(args=None):
+    rclpy.init(args=args)
+    node = CuriosityGradientNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()

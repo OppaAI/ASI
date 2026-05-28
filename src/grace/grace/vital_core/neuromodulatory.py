@@ -6,7 +6,7 @@ Models key neuromodulators: Dopamine, Cortisol, Oxytocin, Serotonin, Norepinephr
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import NeuromodulatoryState, to_json
+from grace.utils.schemas import NeuromodulatoryState, to_json
 
 
 class NeuromodulatoryNode(Node):

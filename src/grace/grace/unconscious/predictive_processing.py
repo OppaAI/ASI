@@ -8,8 +8,8 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from grace.grace.utils.schemas import SensorBundle, PredictionError, to_json
-from grace.grace.utils.ollama_client import OllamaClient
+from grace.utils.schemas import SensorBundle, PredictionError, to_json
+from grace.utils.ollama_client import OllamaClient
 
 
 SYSTEM_PROMPT = """You are GRACE's predictive processing hierarchy.
@@ -77,9 +77,9 @@ class PredictiveProcessingNode(Node):
 
         # Compute combined error (precision-weighted mean)
         combined = (
-            parsed["low_level_error"] * 0.5 +
-            parsed["mid_level_error"] * 0.3 +
-            parsed["high_level_error"] * 0.2
+            parsed.get("low_level_error", 0.0) * 0.5 +
+            parsed.get("mid_level_error", 0.0) * 0.3 +
+            parsed.get("high_level_error", 0.0) * 0.2
         )
 
         err = PredictionError(

@@ -6,7 +6,7 @@ Mood regulation · Emotional inertia · Affective capacity
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import AffectiveWorkingMemoryState, to_json
+from grace.utils.schemas import AffectiveWorkingMemoryState, to_json
 
 
 class AffectiveWorkingMemoryNode(Node):

@@ -6,7 +6,7 @@ Implements core biological drives: Energy, Curiosity, Patience Decay
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import HomeostaticDriveState, to_json
+from grace.utils.schemas import HomeostaticDriveState, to_json
 
 
 class DriveNode(Node):

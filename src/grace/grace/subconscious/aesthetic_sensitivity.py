@@ -6,7 +6,7 @@ Beauty · Harmony · Sublime · Aesthetic Judgment
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import AestheticSensitivityState, to_json
+from grace.utils.schemas import AestheticSensitivityState, to_json
 
 
 class AestheticSensitivityNode(Node):

@@ -2,14 +2,47 @@
 grace_agi/utils/ollama_client.py
 Thin async-friendly wrapper around the Ollama / NVIDIA Nemotron API.
 Falls back to rule-based responses if the endpoint is unreachable.
+
+Includes cross-process rate limiting to prevent the thundering-herd
+problem when 30+ SLM nodes all try to call Ollama simultaneously.
 """
 import os
 import json
+import time
 import logging
 import requests
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+_LLM_RATE_DIR = "/tmp/grace_llm_rate"
+
+
+def _throttle(model: str, min_interval: float) -> bool:
+    """
+    Cross-process LLM rate limiter.
+    Returns True if the call should proceed, False if throttled.
+    Each model has its own throttle counter (so conversation's model
+    isn't blocked by SLM nodes using a different model).
+    """
+    if min_interval <= 0:
+        return True
+    os.makedirs(_LLM_RATE_DIR, exist_ok=True)
+    slug = model.replace("/", "_").replace(":", "_").replace(".", "_")
+    lock = os.path.join(_LLM_RATE_DIR, slug)
+
+    now = time.time()
+    try:
+        if os.path.exists(lock):
+            with open(lock) as f:
+                last = float(f.read().strip())
+            if now - last < min_interval:
+                return False
+        with open(lock, "w") as f:
+            f.write(str(now))
+        return True
+    except Exception:
+        return True  # fail open
 
 
 class OllamaClient:
@@ -31,12 +64,14 @@ class OllamaClient:
         timeout: float = 60.0,
         max_tokens: int = 512,
         temperature: float = 1.25,
+        min_interval: float = 0.0,
     ):
         self.host = host.rstrip("/")
         self.model = model
         self.timeout = timeout
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.min_interval = min_interval
 
         self._headers = {"Content-Type": "application/json"}
         self._nvidia_mode = False   # always use native Ollama API
@@ -50,6 +85,11 @@ class OllamaClient:
         history: Optional[list] = None,
     ) -> str:
         """Send a chat message and return the assistant reply as a string."""
+        # Rate limit: skip if we're too close to the last call for this model
+        if not _throttle(self.model, self.min_interval):
+            logger.debug(f"OllamaClient: throttled call to {self.model}")
+            return self._fallback(user_message)
+
         messages = [{"role": "system", "content": system}]
         if history:
             messages.extend(history)
@@ -100,7 +140,6 @@ class OllamaClient:
 
         data = resp.json()
 
-        # Get content, ignore thinking field entirely
         content = data["message"]["content"].strip()
 
         # Strip <think>...</think> blocks if they leaked into content
@@ -115,7 +154,6 @@ class OllamaClient:
             content = "\n".join(lines).strip()
 
         # If model wrapped JSON in explanation text, extract just the JSON
-        # Find first { or [ and last } or ]
         json_start = -1
         json_end   = -1
         for i, ch in enumerate(content):

@@ -6,7 +6,7 @@ Accumulated Relational Threat · Social Pain
 import json, time, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import ImmuneBudget, to_json
+from grace.utils.schemas import ImmuneBudget, to_json
 
 
 class ImmuneBudgetNode(Node):

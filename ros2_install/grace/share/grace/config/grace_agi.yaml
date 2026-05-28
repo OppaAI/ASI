@@ -1,0 +1,109 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# GRACE AGi — Central Configuration
+# Edit this file to tune the architecture without touching source code.
+# ──────────────────────────────────────────────────────────────────────────────
+
+grace:
+  robot_name: "GRACE"
+  log_level: "INFO"          # DEBUG | INFO | WARN | ERROR
+
+  # ── Ollama / Nemotron (local on Jetson) ──────────────────────────────────────
+  ollama:
+    host: "http://localhost:11434"
+    model: "nemotron"       # match whatever you pulled: nemotron, nemotron:latest, etc.
+    timeout_sec: 60.0       # generous — first inference on Jetson can be slow
+    max_tokens: 512
+    temperature: 0.7
+
+  # ── ROS2 topic names ─────────────────────────────────────────────────────────
+  topics:
+    # Sensor inputs
+    sensor_bundle:        "/grace/sensors/bundle"
+    camera_raw:           "/camera/image_raw"
+    lidar_scan:           "/scan"
+    audio_in:             "/grace/audio/in"
+    imu:                  "/imu/data"
+
+    # Unconscious pipeline
+    prediction_errors:    "/grace/unconscious/prediction_errors"
+    thalamic_broadcast:   "/grace/unconscious/thalamic_broadcast"
+    affective_state:      "/grace/unconscious/affective_state"
+    reward_signal:        "/grace/unconscious/reward"
+    implicit_patterns:    "/grace/unconscious/implicit_patterns"
+    relevance_scores:     "/grace/unconscious/relevance"
+    personality_bias:     "/grace/unconscious/personality"
+    value_weights:        "/grace/unconscious/values"
+    precision_params:     "/grace/unconscious/precision"
+
+    # Subconscious pipeline
+    episodic_recall:      "/grace/subconscious/episodic"
+    semantic_recall:      "/grace/subconscious/semantic"
+    procedural_recall:    "/grace/subconscious/procedural"
+    social_model:         "/grace/subconscious/social"
+    attitude_state:       "/grace/subconscious/attitudes"
+
+    # Conscience pipeline
+    moral_knowledge_out:  "/grace/conscience/knowledge"
+    moral_reasoning_out:  "/grace/conscience/reasoning"
+    moral_verdict:        "/grace/conscience/verdict"
+
+    # Qualia pipeline
+    qualia_field:         "/grace/qualia/field"
+
+    # Conscious pipeline
+    working_memory_out:   "/grace/conscious/working_memory"
+    memory_context:       "/grace/conscious/memory_context"
+    global_workspace_out: "/grace/conscious/global_workspace"
+    reflection_out:       "/grace/conscious/reflection"
+    metacog_out:          "/grace/conscious/metacognition"
+    executive_plan:       "/grace/conscious/executive_plan"
+    salience_out:         "/grace/conscious/salience"
+    dmn_out:              "/grace/conscious/dmn"
+    narrative_self_out:   "/grace/conscious/narrative_self"
+
+    # Action outputs
+    cmd_vel:              "/cmd_vel"
+    speech_out:           "/grace/speech/out"
+    action_log:           "/grace/action/log"
+
+    # Dreaming / consolidation (triggered offline)
+    consolidation_trigger: "/grace/dreaming/trigger"
+    consolidation_out:     "/grace/dreaming/consolidation"
+
+  # ── Timing (seconds) ─────────────────────────────────────────────────────────
+  timing:
+    sensor_hz:          20.0
+    unconscious_hz:     10.0
+    subconscious_hz:     5.0
+    conscious_hz:        2.0
+    action_hz:           5.0
+    dreaming_interval: 300.0   # run consolidation every 5 minutes of idle
+
+  # ── Memory persistence paths ──────────────────────────────────────────────────
+  memory:
+    episodic_db:    "/home/grace/memory/episodic.json"
+    semantic_db:    "/home/grace/memory/semantic.json"
+    procedural_db:  "/home/grace/memory/procedural.json"
+    social_db:      "/home/grace/memory/social.json"
+    personality_db: "/home/grace/memory/personality.json"
+    values_db:      "/home/grace/memory/values.json"
+    narrative_db:   "/home/grace/memory/narrative.json"
+    max_episodic_entries: 500
+    max_semantic_entries: 1000
+
+  # ── Affective baseline ────────────────────────────────────────────────────────
+  affective:
+    default_valence:   0.5    # 0=negative  1=positive
+    default_arousal:   0.3    # 0=calm      1=excited
+    default_dominance: 0.5    # 0=submissive 1=dominant
+    decay_rate:        0.05   # per cycle drift toward baseline
+
+  # ── Moral system ──────────────────────────────────────────────────────────────
+  conscience:
+    strictness: 0.8           # 0=lenient  1=strict
+    scripture_path: "/home/grace/config/scripture_principles.yaml"
+
+  # ── Nav2 integration ──────────────────────────────────────────────────────────
+  nav2:
+    enabled: true
+    action_server: "/navigate_to_pose"

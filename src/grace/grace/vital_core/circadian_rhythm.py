@@ -6,7 +6,7 @@ Attention · Creativity · Energy Cycles
 import json, time, math, rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from grace.grace.utils.schemas import CircadianRhythm, to_json
+from grace.utils.schemas import CircadianRhythm, to_json
 
 
 class CircadianRhythmNode(Node):
